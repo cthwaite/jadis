@@ -18,7 +18,7 @@ fn main() {
     let _window = config.window.build(&events_loop);
 
     info!("starting main loop");
-    loop {
+    'main: loop {
         let mut quitting = false;
         events_loop.poll_events(|event| {
             if let Event::WindowEvent { event, .. } = event {
@@ -38,7 +38,7 @@ fn main() {
         });
 
         if quitting {
-            break;
+            break 'main;
         }
     }
 }
