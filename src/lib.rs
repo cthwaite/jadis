@@ -10,4 +10,5 @@ pub mod backend;
 pub mod config;
 pub mod input;
 pub mod prelude;
+pub mod shader;
 pub mod window;
