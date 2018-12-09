@@ -1,8 +1,26 @@
-use winit::{Event, EventsLoop, KeyboardInput, VirtualKeyCode, WindowEvent};
-
 use jadis::config::Config;
+use jadis::input::InputHandler;
+use jadis::backend::Backend;
+use jadis::window::Window;
 
 use log::{info, error, debug, warn};
+
+
+
+fn run_loop(window: &mut Window) {
+    let backend = Backend::new(&window);
+
+    let mut input_handler = InputHandler::default();
+
+    info!("starting main loop");
+    'main: loop {
+        window.events_loop.poll_events(|event| input_handler.handle_event(event));
+        if input_handler.should_quit() {
+            info!("got quit signal, breaking from 'main loop");
+            break 'main;
+        }
+    }
+}
 
 fn main() {
     let config_path = std::env::var("JADIS_CONFIG").unwrap_or("config.toml".to_owned());
@@ -14,31 +32,9 @@ fn main() {
     });
     config.logging.setup_logging().expect("Failed to start logging!");
     info!("Config successfully loaded from {}", config_path);
-    let mut events_loop = EventsLoop::new();
-    let _window = config.window.build(&events_loop);
+    let mut window = Window::new(&config);
 
-    info!("starting main loop");
-    'main: loop {
-        let mut quitting = false;
-        events_loop.poll_events(|event| {
-            if let Event::WindowEvent { event, .. } = event {
-                match event {
-                    WindowEvent::CloseRequested => quitting = true,
-                    WindowEvent::KeyboardInput {
-                        input: KeyboardInput {
-                            virtual_keycode: Some(VirtualKeyCode::Escape),
-                            ..
-                        },
-                        ..
-                    } => quitting = true,
-                    _ => ()
-                }
+    run_loop(&mut window);
 
-            }
-        });
-
-        if quitting {
-            break 'main;
-        }
-    }
+    info!("Done...");
 }
