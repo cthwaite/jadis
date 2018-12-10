@@ -2,7 +2,7 @@ use std::path::Path;
 use std::fs::{self, File};
 use std::error::Error;
 use std::io::Read;
-use crate::prelude::*;
+use crate::hal_prelude::*;
 use glsl_to_spirv::ShaderType;
 
 

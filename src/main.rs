@@ -5,7 +5,7 @@ use jadis::input::InputHandler;
 use jadis::shader::{ShaderHandle, ShaderSource};
 use jadis::window::Window;
 
-use jadis::prelude::*;
+use jadis::hal_prelude::*;
 
 
 use log::{info, warn/* error, debug, */};

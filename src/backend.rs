@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::hal_prelude::*;
 use crate::window::Window;
 
 use log::{info};

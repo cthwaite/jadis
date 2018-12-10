@@ -8,7 +8,7 @@ pub extern crate gfx_backend_vulkan as gfx_backend;
 
 pub mod backend;
 pub mod config;
+pub mod hal_prelude;
 pub mod input;
-pub mod prelude;
 pub mod shader;
 pub mod window;
