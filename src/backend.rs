@@ -17,6 +17,17 @@ pub type BackbufferType = gfx_hal::Backbuffer<gfx_backend::Backend>;
 
 pub type SurfaceType = gfx_hal::Surface<gfx_backend::Backend>;
 
+
+/// Get preferred adapter according to some ordering criterion.
+pub fn get_preferred_adapter<B, O, F>(adapters: &[gfx_hal::Adapter<B>], criterion: F) -> usize
+    where 
+    B: gfx_hal::Backend,
+    O: Ord,
+    F: FnMut(&(usize, &gfx_hal::Adapter<B>)) -> O {
+    adapters.into_iter()
+            .enumerate().min_by_key(criterion).unwrap().0
+}
+
 pub struct Backend {
     instance: gfx_backend::Instance,
     adapter: usize,
@@ -38,8 +49,17 @@ impl Backend {
             info!("Found adapter: {} ({:?})", adapter.info.name, adapter.info.device_type);
         }
 
-        let adapter = Backend::select_adapter(&available_adapters);
-        let (device, physical_device, mut queue_group) = {
+        let adapter = get_preferred_adapter(&available_adapters, |(_index, adapter)| {
+            use gfx_hal::adapter::DeviceType;
+            match adapter.info.device_type {
+                DeviceType::IntegratedGpu => 0,
+                DeviceType::DiscreteGpu => 1,
+                DeviceType::VirtualGpu => 2,
+                DeviceType::Cpu => 3,
+                DeviceType::Other => 4,
+            }
+        });
+        let (device, physical_device, queue_group) = {
             let actual_adapter = &mut available_adapters[adapter];
             info!("==> Using adapter: {} ({:?})", actual_adapter.info.name, actual_adapter.info.device_type);
             let num_queues = 1;
