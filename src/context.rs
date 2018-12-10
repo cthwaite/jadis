@@ -19,10 +19,6 @@ impl InstanceWrapper {
         }
     }
 
-    pub fn create_surface(&self, window: &Window) -> <gfx_backend::Backend as gfx_hal::Backend>::Surface {
-        self.instance.create_surface(&window.window)
-    }
-
     pub fn create_context(&self, window: &Window) -> Context<gfx_backend::Backend> {
         Context::new(
             self.instance.create_surface(&window.window),
