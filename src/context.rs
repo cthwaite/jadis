@@ -7,23 +7,6 @@ use gfx_hal::{
 
 use log::{info};
 
-// To replace with generics when stabilised...
-/*
-pub type AdapterType = gfx_hal::Adapter<gfx_backend::Backend>;
-pub type CommandPoolType = gfx_hal::CommandPool<gfx_backend::Backend, gfx_hal::queue::capability::Graphics>;
-pub type DeviceType = gfx_backend::Device;
-pub type PhysicalDeviceType = gfx_backend::PhysicalDevice;
-pub type QueueType = gfx_hal::queue::family::QueueGroup<gfx_backend::Backend, gfx_hal::queue::capability::Graphics>;
-pub type SurfaceCapabilities = ;
-pub type ImageViewType = <gfx_backend::Backend as gfx_hal::Backend>::ImageView;
-pub type ImageType = <gfx_backend::Backend as gfx_hal::Backend>::Image;
-pub type PipelineType = <gfx_backend::Backend as gfx_hal::Backend>::GraphicsPipeline;
-pub type SwapchainType = <gfx_backend::Backend as gfx_hal::Backend>::Swapchain;
-pub type BackbufferType = gfx_hal::Backbuffer<gfx_backend::Backend>;
-pub type FramebufferType = <gfx_backend::Backend as gfx_hal::Backend>::Framebuffer;
-pub type SurfaceType = gfx_hal::Surface<gfx_backend::Backend>;
-pub type RenderPassType = <gfx_backend::Backend as gfx_hal::Backend>::RenderPass;
-*/
 
 pub struct InstanceWrapper {
     instance: gfx_backend::Instance,
