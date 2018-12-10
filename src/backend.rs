@@ -82,18 +82,17 @@ impl Backend {
         &self,
         images: &[ImageType],
         view_kind: ViewKind,
-        format: Format,
         swizzle: Swizzle,
         range: SubresourceRange) -> Result<Vec<ImageViewType>, ViewError> {
         images.iter()
-                .map(|image| self.create_image_view(image, view_kind, format, swizzle, range.clone()))
+                .map(|image| self.create_image_view(image, view_kind, swizzle, range.clone()))
                 .collect()
     }
+
     pub fn create_image_view(
         &self,
         image: &ImageType,
         view_kind: ViewKind,
-        format: Format,
         swizzle: Swizzle,
         range: SubresourceRange) -> Result<ImageViewType, ViewError> {
         self.device.create_image_view(image,
