@@ -1,4 +1,4 @@
-use jadis::backend::{Backend};
+use jadis::context::{Context, InstanceWrapper};
 use jadis::config::Config;
 use jadis::gfx_backend;
 use jadis::input::InputHandler;
@@ -23,7 +23,8 @@ struct DummyPipeline {
 
 
 fn run_loop(window: &mut Window) {
-    let mut backend = Backend::new(&window);
+    let instance = InstanceWrapper::new();
+    let mut backend = instance.create_context(&window);
 
     let source = ShaderSource::from_glsl_path("assets\\tri.vert").expect("Couldn't find fragment shader");
     let mut vert = ShaderHandle::new(&backend.device, source).expect("failed to load fragment shader");
@@ -137,6 +138,7 @@ fn run_loop(window: &mut Window) {
 
         if swapchain_stuff.is_none() {
             rebuild_swapchain = false;
+            info!("rebuilding swapchain");
             let (caps, _, _) = backend.get_compatibility();
 
             // Here we just create the swapchain, image views, and framebuffers
