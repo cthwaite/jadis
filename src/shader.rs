@@ -6,10 +6,39 @@ use crate::hal_prelude::*;
 use glsl_to_spirv::ShaderType;
 use std::fmt;
 
-type EntryPointType<'a> = EntryPoint<'a, gfx_backend::Backend>;
 type ShaderModule<B> = <B as gfx_hal::Backend>::ShaderModule;
-type ShaderModuleType = ShaderModule<gfx_backend::Backend>;
 
+
+#[derive(Debug)]
+pub enum ShaderHandleError {
+    LoadFail(std::io::Error),
+    ShaderFail(gfx_hal::device::ShaderError),
+    Other(String)
+}
+impl From<String> for ShaderHandleError {
+    fn from(err: String) -> Self {
+        ShaderHandleError::Other(err)
+    }
+}
+
+impl From<std::io::Error> for ShaderHandleError {
+    fn from(err: std::io::Error) -> Self {
+        ShaderHandleError::LoadFail(err)
+    }
+}
+
+impl From<gfx_hal::device::ShaderError> for ShaderHandleError {
+    fn from(err: gfx_hal::device::ShaderError) -> Self {
+        ShaderHandleError::ShaderFail(err)
+    }
+}
+impl fmt::Display for ShaderHandleError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+impl Error for ShaderHandleError {
+}
 
 pub fn compile_to_spirv(source: &str, shader_type: &ShaderType) -> Result<Vec<u8>, ShaderHandleError> {
     let mut compiled_file = glsl_to_spirv::compile(source, shader_type.clone())?;
@@ -52,37 +81,6 @@ impl ShaderSource {
 pub struct ShaderHandle<B: gfx_hal::Backend> {
     source: ShaderSource,
     module: Option<ShaderModule<B>>,
-}
-
-#[derive(Debug)]
-pub enum ShaderHandleError {
-    LoadFail(std::io::Error),
-    ShaderFail(gfx_hal::device::ShaderError),
-    Other(String)
-}
-impl From<String> for ShaderHandleError {
-    fn from(err: String) -> Self {
-        ShaderHandleError::Other(err)
-    }
-}
-
-impl From<std::io::Error> for ShaderHandleError {
-    fn from(err: std::io::Error) -> Self {
-        ShaderHandleError::LoadFail(err)
-    }
-}
-
-impl From<gfx_hal::device::ShaderError> for ShaderHandleError {
-    fn from(err: gfx_hal::device::ShaderError) -> Self {
-        ShaderHandleError::ShaderFail(err)
-    }
-}
-impl fmt::Display for ShaderHandleError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-impl Error for ShaderHandleError {
 }
 
 
