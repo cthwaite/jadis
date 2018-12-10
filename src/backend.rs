@@ -3,6 +3,7 @@ use crate::window::Window;
 
 use log::{info};
 
+// To replace with generics when stabilised...
 pub type AdapterType = gfx_hal::Adapter<gfx_backend::Backend>;
 pub type CommandPoolType = gfx_hal::CommandPool<gfx_backend::Backend, gfx_hal::queue::capability::Graphics>;
 pub type DeviceType = gfx_backend::Device;
@@ -11,11 +12,12 @@ pub type QueueType = gfx_hal::queue::family::QueueGroup<gfx_backend::Backend, gf
 pub type SurfaceCapabilities = gfx_hal::window::SurfaceCapabilities;
 pub type ImageViewType = <gfx_backend::Backend as gfx_hal::Backend>::ImageView;
 pub type ImageType = <gfx_backend::Backend as gfx_hal::Backend>::Image;
-
+pub type PipelineType = <gfx_backend::Backend as gfx_hal::Backend>::GraphicsPipeline;
 pub type SwapchainType = <gfx_backend::Backend as gfx_hal::Backend>::Swapchain;
 pub type BackbufferType = gfx_hal::Backbuffer<gfx_backend::Backend>;
-
+pub type FramebufferType = <gfx_backend::Backend as gfx_hal::Backend>::Framebuffer;
 pub type SurfaceType = gfx_hal::Surface<gfx_backend::Backend>;
+pub type RenderPassType = <gfx_backend::Backend as gfx_hal::Backend>::RenderPass;
 
 
 /// Get preferred adapter according to some ordering criterion.
@@ -86,8 +88,14 @@ impl Backend {
         }
     }
 
+    pub fn get_compatibility(&self) -> (SurfaceCapabilities, Option<Vec<Format>>, Vec<gfx_hal::PresentMode>) {
+        let actual_adapter = &self.available_adapters[self.adapter];
+        let physical_device = &actual_adapter.physical_device;
+        self.surface.compatibility(physical_device)
+    }
+
     pub fn create_command_pool(&self, max_buffers: usize) -> CommandPoolType {
-        self.device.create_command_pool_typed(&self.queue_group, CommandPoolCreateFlags::empty(), max_buffers)
+        self.device.create_command_pool_typed(&self.queue_group, CommandPoolCreateFlags::empty(), max_buffers).unwrap()
     }
 
     pub fn get_swapchain_config(&self) -> SwapchainConfig {
@@ -95,7 +103,7 @@ impl Backend {
     }
 
     pub fn create_swapchain(&mut self, config: SwapchainConfig, old_swapchain: Option<SwapchainType>) -> (SwapchainType, BackbufferType) {
-        self.device.create_swapchain(&mut self.surface, config, old_swapchain)
+        self.device.create_swapchain(&mut self.surface, config, old_swapchain).expect("Failed to create swapchain!")
     }
 
     pub fn map_to_image_views(
@@ -122,8 +130,17 @@ impl Backend {
                                       range)
     }
 
-    fn select_adapter(_adapters: &Vec<AdapterType>) -> usize {
-        0
+    pub fn image_views_to_fbos(
+            &self,
+            image_views: &[ImageViewType],
+            render_pass: &RenderPassType,
+            extent: Extent) -> Result<Vec<FramebufferType>, gfx_hal::device::OutOfMemory> {
+        image_views
+            .iter()
+            .map(|image_view| {
+                self.device
+                    .create_framebuffer(&render_pass, vec![image_view], extent)
+            }).collect()
     }
 
     /// We pick a colour format from the list of supported formats. If there 
