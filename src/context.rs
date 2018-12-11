@@ -2,7 +2,6 @@ use crate::hal_prelude::*;
 use crate::window::Window;
 use gfx_hal::{
     window::SurfaceCapabilities,
-    Instance
 };
 
 use log::{info};
@@ -35,6 +34,7 @@ pub fn get_preferred_adapter<B, O, F>(adapters: &[gfx_hal::Adapter<B>], criterio
     adapters.into_iter()
             .enumerate().min_by_key(criterion).unwrap().0
 }
+
 
 pub struct Context<B: gfx_hal::Backend> {
     adapter: usize,
@@ -96,10 +96,6 @@ impl<B: gfx_hal::Backend> Context<B> {
 
     pub fn create_command_pool(&self, max_buffers: usize) -> gfx_hal::CommandPool<B, gfx_hal::queue::capability::Graphics> {
         self.device.create_command_pool_typed(&self.queue_group, CommandPoolCreateFlags::empty(), max_buffers).unwrap()
-    }
-
-    pub fn get_swapchain_config(&self) -> SwapchainConfig {
-        SwapchainConfig::from_caps(&self.surface_caps, self.surface_colour_format)
     }
 
     pub fn create_swapchain(&mut self, config: SwapchainConfig, old_swapchain: Option<B::Swapchain>) -> (B::Swapchain, gfx_hal::Backbuffer<B>) {
