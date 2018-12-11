@@ -17,12 +17,51 @@ static JADIS_CONFIG_ENV : &'static str = "JADIS_CONFIG";
 static JADIS_CONFIG_DEFAULT_PATH : &'static str = "config.toml";
 
 
-struct DummyPipeline {
-    frag: ShaderHandle,
-    vert: ShaderHandle,
-    pipeline: <gfx_backend::Backend as gfx_hal::Backend>::GraphicsPipeline,
+pub struct SwapchainState<B: gfx_hal::Backend> {
+    pub swapchain: Option<B::Swapchain>,
+    pub back_buffer: Option<gfx_hal::Backbuffer<B>>,
+    pub extent: Extent,
 }
 
+impl<B: gfx_hal::Backend> SwapchainState<B> {
+    pub fn new(backend: &mut Context<B>) -> Self {
+        let (caps, _, _) = backend.get_compatibility();
+        let swap_config = SwapchainConfig::from_caps(&caps, backend.surface_colour_format);
+        let extent = swap_config.extent.to_extent();
+        let (swapchain, back_buffer) = backend.create_swapchain(swap_config, None);
+        SwapchainState {
+            swapchain: Some(swapchain),
+            back_buffer: Some(back_buffer),
+            extent,
+        }
+    }
+
+    /// Check if the swapchain is in a valid state for drawing.
+    pub fn is_valid(&self) -> bool {
+        self.swapchain.is_some()
+    }
+    
+    /// Rebuild the swapchain.
+    pub fn rebuild(&mut self, backend: &mut Context<B>) {
+        self.destroy(&backend.device);
+        let (caps, _, _) = backend.get_compatibility();
+        let swap_config = SwapchainConfig::from_caps(&caps, backend.surface_colour_format);
+        let extent = swap_config.extent.to_extent();
+        let (swapchain, back_buffer) = backend.create_swapchain(swap_config, None);
+        self.swapchain = Some(swapchain);
+        self.back_buffer = Some(back_buffer);
+        info!("{:?}", extent);
+        self.extent = extent;
+    }
+
+    /// Destroy the swapchain.
+    pub fn destroy(&mut self, device: &B::Device) {
+        if let Some(swapchain) = self.swapchain.take() {
+            device.destroy_swapchain(swapchain);
+        }
+        self.back_buffer.take();
+    }
+}
 
 fn run_loop(window: &mut Window) {
     let instance = InstanceWrapper::new();
@@ -106,8 +145,8 @@ fn run_loop(window: &mut Window) {
     let present_semaphore = backend.device.create_semaphore().unwrap();
 
     info!("starting main loop");
-    let mut swapchain_stuff : Option<(_, _, _, _)> = None;
-    let mut rebuild_swapchain = false;
+    let mut swapchain = SwapchainState::new(&mut backend);
+    let mut swapchain_stuff : Option<(_, _)> = None;
     'main: loop {
         window.events_loop.poll_events(|event| input_handler.handle_event(event));
 
@@ -119,7 +158,7 @@ fn run_loop(window: &mut Window) {
         };
         if (should_quit ||should_rebuild_swapchain) && swapchain_stuff.is_some() {
             // Take ownership of swapchain_stuff contents.
-            let (swapchain, _extent, frame_views, framebuffers) = swapchain_stuff.take().unwrap();
+            let (frame_views, framebuffers) = swapchain_stuff.take().unwrap();
 
             // Wait for all queues to be idle and reset the comand pool, so that
             // we know no commands are being executed while we destroy the
@@ -135,7 +174,7 @@ fn run_loop(window: &mut Window) {
                 backend.device.destroy_image_view(image_view);
             }
 
-            backend.device.destroy_swapchain(swapchain);
+            swapchain.destroy(&backend.device);
         }
 
         if should_quit {
@@ -143,18 +182,13 @@ fn run_loop(window: &mut Window) {
             break 'main;
         }
 
-        if swapchain_stuff.is_none() {
-            rebuild_swapchain = false;
+        if swapchain_stuff.is_none() || should_rebuild_swapchain {
             info!("rebuilding swapchain");
-            let (caps, _, _) = backend.get_compatibility();
+            swapchain.rebuild(&mut backend);
+            let back_buffer = swapchain.back_buffer.take().unwrap();
+            let extent = swapchain.extent.clone();
 
-            // Here we just create the swapchain, image views, and framebuffers
-            // like we did in part 00, and store them in swapchain_stuff.
-            let swap_config = SwapchainConfig::from_caps(&caps, backend.surface_colour_format);
-            let extent = swap_config.extent.to_extent();
-            let (swapchain, backbuffer) = backend.device.create_swapchain(&mut backend.surface, swap_config, None).unwrap();
-
-            let (frame_views, framebuffers) = match backbuffer {
+            let (frame_views, framebuffers) = match back_buffer {
                 Backbuffer::Images(images) => {
                     let color_range = SubresourceRange {
                         aspects: Aspects::COLOR,
@@ -175,18 +209,19 @@ fn run_loop(window: &mut Window) {
                 Backbuffer::Framebuffer(fbo) => (Vec::new(), vec![fbo]),
             };
 
-            swapchain_stuff = Some((swapchain, extent, frame_views, framebuffers));
+            swapchain_stuff = Some((frame_views, framebuffers));
         }
 
-        let (swapchain, extent, _image_views, framebuffers) = swapchain_stuff.as_mut().unwrap();
+        let (_image_views, framebuffers) = swapchain_stuff.as_mut().unwrap();
+        let swapchain_itself = swapchain.swapchain.as_mut().unwrap();
 
         command_pool.reset();
         let frame_index: SwapImageIndex = {
-            match swapchain.acquire_image(!0, FrameSync::Semaphore(&frame_semaphore)) {
+            match swapchain_itself.acquire_image(!0, FrameSync::Semaphore(&frame_semaphore)) {
                 Ok(i) => i,
                 Err(_) => {
                     warn!("Rebuilding the swapchain because acquire_image errored");
-                    rebuild_swapchain = true;
+                    blackboard.lock().unwrap().should_rebuild_swapchain = true;
                     continue 'main;
                 }
             }
@@ -198,8 +233,8 @@ fn run_loop(window: &mut Window) {
             let viewport = Viewport {
                 rect: Rect {
                     x: 0, y: 0,
-                    w: extent.width as i16,
-                    h: extent.height as i16,
+                    w: swapchain.extent.width as i16,
+                    h: swapchain.extent.height as i16,
                 },
                 depth: 0.0..1.0,
             };
@@ -229,7 +264,7 @@ fn run_loop(window: &mut Window) {
 
         backend.queue_group.queues[0].submit(submission, None);
 
-        let result = swapchain.present(
+        let result = swapchain_itself.present(
             &mut backend.queue_group.queues[0],
             frame_index,
             vec![&present_semaphore],
@@ -237,7 +272,7 @@ fn run_loop(window: &mut Window) {
 
         if result.is_err() {
             warn!("Rebuilding the swapchain because present errored");
-            rebuild_swapchain = true;
+            blackboard.lock().unwrap().should_rebuild_swapchain = true;
         }
     }
 
