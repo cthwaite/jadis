@@ -109,14 +109,13 @@ fn run_loop(window: &mut Window) {
     let mut swapchain_stuff : Option<(_, _, _, _)> = None;
     let mut rebuild_swapchain = false;
     'main: loop {
-        {
-            blackboard.lock().unwrap().reset();
-        }
         window.events_loop.poll_events(|event| input_handler.handle_event(event));
 
         let (should_quit, should_rebuild_swapchain) = {
-            let bb = &blackboard.lock().unwrap();
-            (bb.should_quit, bb.should_rebuild_swapchain)
+            let bb = &mut blackboard.lock().unwrap();
+            let ret = (bb.should_quit, bb.should_rebuild_swapchain);
+            bb.reset();
+            ret
         };
         if (should_quit ||should_rebuild_swapchain) && swapchain_stuff.is_some() {
             // Take ownership of swapchain_stuff contents.
