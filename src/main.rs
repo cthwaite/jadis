@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
-use jadis::context::{Context, InstanceWrapper};
+use jadis::context::{InstanceWrapper};
 use jadis::config::Config;
-use jadis::gfx_backend;
 use jadis::input::{Blackboard, InputHandler};
 use jadis::shader::{ShaderHandle, ShaderSource};
 use jadis::window::Window;
@@ -37,48 +36,21 @@ impl<B: gfx_hal::Backend> SwapchainState<B> {
         }
     }
 
-    /// Check if the swapchain is in a valid state for drawing.
-    pub fn is_valid(&self) -> bool {
-        self.swapchain.is_some()
-    }
-    
-    /// Rebuild the swapchain.
-    pub fn rebuild(&mut self, backend: &mut Context<B>) {
-        self.destroy(&backend.device);
-        let (caps, _, _) = backend.get_compatibility();
-        let swap_config = SwapchainConfig::from_caps(&caps, backend.surface_colour_format);
-        let extent = swap_config.extent.to_extent();
-        let (swapchain, back_buffer) = backend.create_swapchain(swap_config, None);
-        self.swapchain = Some(swapchain);
-        self.back_buffer = Some(back_buffer);
-        info!("{:?}", extent);
-        self.extent = extent;
-    }
-
-    /// Destroy the swapchain.
-    pub fn destroy(&mut self, device: &B::Device) {
-        if let Some(swapchain) = self.swapchain.take() {
-            device.destroy_swapchain(swapchain);
-        }
-        self.back_buffer.take();
-    }
-}
-
 fn run_loop(window: &mut Window) {
     let instance = InstanceWrapper::new();
-    let mut backend = instance.create_context(&window);
+    let mut context = instance.create_context(&window);
 
     let source = ShaderSource::from_glsl_path("assets\\tri.vert").expect("Couldn't find fragment shader");
-    let mut vert = ShaderHandle::new(&backend.device, source).expect("failed to load fragment shader");
+    let mut vert = ShaderHandle::new(&context.device, source).expect("failed to load fragment shader");
     info!("loaded vertex shader");
     
     let source = ShaderSource::from_glsl_path("assets\\tri.frag").expect("Couldn't find vertex shader");
-    let mut frag = ShaderHandle::new(&backend.device, source).expect("failed to load vertex shader");
+    let mut frag = ShaderHandle::new(&context.device, source).expect("failed to load vertex shader");
     info!("loaded fragment shader");
     
     let render_pass = {
         let colour_attachment = Attachment {
-            format: Some(backend.surface_colour_format),
+            format: Some(context.surface_colour_format),
             samples: 1,
             ops: AttachmentOps::new(AttachmentLoadOp::Clear, AttachmentStoreOp::Store),
             stencil_ops: AttachmentOps::DONT_CARE,
@@ -99,11 +71,11 @@ fn run_loop(window: &mut Window) {
             accesses: Access::empty()..(Access::COLOR_ATTACHMENT_READ | Access::COLOR_ATTACHMENT_WRITE),
         };
 
-        backend.device.create_render_pass(&[colour_attachment], &[subpass], &[dependency]).unwrap()
+        context.device.create_render_pass(&[colour_attachment], &[subpass], &[dependency]).unwrap()
     };
 
 
-    let pipeline_layout = backend.device.create_pipeline_layout(&[], &[]).unwrap();
+    let pipeline_layout = context.device.create_pipeline_layout(&[], &[]).unwrap();
     let pipeline = {
         let shader_entries = GraphicsShaderSet {
             vertex: vert.entry_point("main").unwrap(),
@@ -133,20 +105,20 @@ fn run_loop(window: &mut Window) {
     };
 
 
-    let mut blackboard = Arc::new(Mutex::new(Blackboard::default()));
+    let blackboard = Arc::new(Mutex::new(Blackboard::default()));
     let mut input_handler = InputHandler::new(blackboard.clone());
 
 
-    let mut command_pool = backend.create_command_pool(16);
+    let mut command_pool = context.create_command_pool(16);
 
     let clear_colours = &[ClearValue::Color(ClearColor::Float([0.0, 0.0, 0.0, 1.0]))];
 
 
-    let frame_semaphore = backend.device.create_semaphore().unwrap();
-    let present_semaphore = backend.device.create_semaphore().unwrap();
+    let frame_semaphore = context.device.create_semaphore().unwrap();
+    let present_semaphore = context.device.create_semaphore().unwrap();
 
     info!("starting main loop");
-    let mut swapchain = SwapchainState::new(&mut backend);
+    let mut swapchain = SwapchainState::new(&mut context);
     let mut swapchain_stuff : Option<(_, _)> = None;
     'main: loop {
         window.events_loop.poll_events(|event| input_handler.handle_event(event));
@@ -164,18 +136,18 @@ fn run_loop(window: &mut Window) {
             // Wait for all queues to be idle and reset the comand pool, so that
             // we know no commands are being executed while we destroy the
             // swapchain.
-            backend.device.wait_idle().unwrap();
+            context.device.wait_idle().unwrap();
             command_pool.reset();
 
             for framebuffer in framebuffers {
-                backend.device.destroy_framebuffer(framebuffer);
+                context.device.destroy_framebuffer(framebuffer);
             }
 
             for image_view in frame_views {
-                backend.device.destroy_image_view(image_view);
+                context.device.destroy_image_view(image_view);
             }
 
-            swapchain.destroy(&backend.device);
+            swapchain.destroy(&context.device);
         }
 
         if should_quit {
@@ -185,7 +157,7 @@ fn run_loop(window: &mut Window) {
 
         if swapchain_stuff.is_none() || should_rebuild_swapchain {
             info!("rebuilding swapchain");
-            swapchain.rebuild(&mut backend);
+            swapchain.rebuild(&mut context);
             let back_buffer = swapchain.back_buffer.take().unwrap();
             let extent = swapchain.extent.clone();
 
@@ -197,13 +169,13 @@ fn run_loop(window: &mut Window) {
                         layers: 0..1,
                     };
 
-                    let image_views = backend.map_to_image_views(
+                    let image_views = context.map_to_image_views(
                         &images,
                         ViewKind::D2,
                         Swizzle::NO,
                         color_range.clone(),
                     ).unwrap();
-                    let fbos = backend.image_views_to_fbos(&image_views, &render_pass, extent).unwrap();
+                    let fbos = context.image_views_to_fbos(&image_views, &render_pass, extent).unwrap();
 
                     (image_views, fbos)
                 }
@@ -263,10 +235,10 @@ fn run_loop(window: &mut Window) {
                             .signal(&[&present_semaphore])
                             .submit(vec![finished_command_buffer]);
 
-        backend.queue_group.queues[0].submit(submission, None);
+        context.queue_group.queues[0].submit(submission, None);
 
         let result = swapchain_itself.present(
-            &mut backend.queue_group.queues[0],
+            &mut context.queue_group.queues[0],
             frame_index,
             vec![&present_semaphore],
         );
@@ -277,7 +249,7 @@ fn run_loop(window: &mut Window) {
         }
     }
 
-    let device = &backend.device;
+    let device = &context.device;
 
     device.destroy_graphics_pipeline(pipeline);
     device.destroy_pipeline_layout(pipeline_layout);
@@ -289,8 +261,8 @@ fn run_loop(window: &mut Window) {
     device.destroy_semaphore(frame_semaphore);
     device.destroy_semaphore(present_semaphore);
 
-    vert.destroy(&backend.device);
-    frag.destroy(&backend.device);
+    vert.destroy(device);
+    frag.destroy(device);
 }
 
 
