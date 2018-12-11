@@ -3,6 +3,8 @@ use gfx_hal::SwapchainConfig;
 use gfx_hal::image::Extent;
 use gfx_hal::device::Device;
 
+use crate::hal_prelude::*;
+
 use log::{info};
 
 use crate::context::Context;
