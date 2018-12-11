@@ -1,7 +1,9 @@
+use std::sync::{Arc, Mutex};
+
 use jadis::context::{Context, InstanceWrapper};
 use jadis::config::Config;
 use jadis::gfx_backend;
-use jadis::input::InputHandler;
+use jadis::input::{Blackboard, InputHandler};
 use jadis::shader::{ShaderHandle, ShaderSource};
 use jadis::window::Window;
 
@@ -91,8 +93,8 @@ fn run_loop(window: &mut Window) {
     };
 
 
-
-    let mut input_handler = InputHandler::default();
+    let mut blackboard = Arc::new(Mutex::new(Blackboard::default()));
+    let mut input_handler = InputHandler::new(blackboard.clone());
 
 
     let mut command_pool = backend.create_command_pool(16);
@@ -107,10 +109,16 @@ fn run_loop(window: &mut Window) {
     let mut swapchain_stuff : Option<(_, _, _, _)> = None;
     let mut rebuild_swapchain = false;
     'main: loop {
-        input_handler.reset();
+        {
+            blackboard.lock().unwrap().reset();
+        }
         window.events_loop.poll_events(|event| input_handler.handle_event(event));
 
-        if (input_handler.should_quit() || rebuild_swapchain || input_handler.should_rebuild_swapchain()) && swapchain_stuff.is_some() {
+        let (should_quit, should_rebuild_swapchain) = {
+            let bb = &blackboard.lock().unwrap();
+            (bb.should_quit, bb.should_rebuild_swapchain)
+        };
+        if (should_quit ||should_rebuild_swapchain) && swapchain_stuff.is_some() {
             // Take ownership of swapchain_stuff contents.
             let (swapchain, _extent, frame_views, framebuffers) = swapchain_stuff.take().unwrap();
 
@@ -131,7 +139,7 @@ fn run_loop(window: &mut Window) {
             backend.device.destroy_swapchain(swapchain);
         }
 
-        if input_handler.should_quit() {
+        if should_quit {
             info!("got quit signal, breaking from 'main loop");
             break 'main;
         }
