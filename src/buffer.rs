@@ -1,5 +1,5 @@
-use gfx_hal::Backend;
 use gfx_hal::{
+    Backend,
     Device,
     MemoryType, 
     adapter::MemoryTypeId,
@@ -9,7 +9,7 @@ use gfx_hal::{
 
 /// Buffer data structure.
 pub struct Buffer<B: gfx_hal::Backend> {
-    buffer: Option<B::Buffer>,
+    pub buffer: Option<B::Buffer>,
     memory: Option<B::Memory>,
     size: u64,
 }
