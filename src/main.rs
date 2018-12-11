@@ -1,11 +1,11 @@
 use std::sync::{Arc, Mutex};
 
-use jadis::context::{InstanceWrapper};
+use jadis::context::{Context, InstanceWrapper};
 use jadis::config::Config;
 use jadis::input::{Blackboard, InputHandler};
 use jadis::shader::{ShaderHandle, ShaderSource};
 use jadis::window::Window;
-use jadis::swapchain::SwapchainState;
+use jadis::swapchain::{FramebufferState, SwapchainState};
 
 use jadis::hal_prelude::*;
 
@@ -16,27 +16,54 @@ use log::{info, warn/* error, debug, */};
 static JADIS_CONFIG_ENV : &'static str = "JADIS_CONFIG";
 static JADIS_CONFIG_DEFAULT_PATH : &'static str = "config.toml";
 
-
-
-pub struct FramebufferState<B: gfx_hal::Backend> {
-    framebuffers: Option<Vec<B::Framebuffer>>,
-    image_views: Option<Vec<B::ImageView>>
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+struct Vertex {
+    position: [f32; 3],
+    colour: [f32; 4]
 }
 
+
+const MESH: &[Vertex] = &[
+    Vertex {
+        position: [0.0, -1.0, 0.0],
+        colour: [1.0, 0.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [-1.0, 0.0, 0.0],
+        colour: [0.0, 0.0, 1.0, 1.0],
+    },
+    Vertex {
+        position: [0.0, 1.0, 0.0],
+        colour: [0.0, 1.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [0.0, -1.0, 0.0],
+        colour: [1.0, 0.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [0.0, 1.0, 0.0],
+        colour: [0.0, 1.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, 0.0, 0.0],
+        colour: [1.0, 1.0, 0.0, 1.0],
+    },
+];
 
 
 fn run_loop(window: &mut Window) {
     let instance = InstanceWrapper::new();
     let mut context = instance.create_context(&window);
 
-    let source = ShaderSource::from_glsl_path("assets\\tri.vert").expect("Couldn't find fragment shader");
+    let source = ShaderSource::from_glsl_path("assets\\mesh.vert").expect("Couldn't find fragment shader");
     let mut vert = ShaderHandle::new(&context.device, source).expect("failed to load fragment shader");
     info!("loaded vertex shader");
     
-    let source = ShaderSource::from_glsl_path("assets\\tri.frag").expect("Couldn't find vertex shader");
+    let source = ShaderSource::from_glsl_path("assets\\mesh.frag").expect("Couldn't find vertex shader");
     let mut frag = ShaderHandle::new(&context.device, source).expect("failed to load vertex shader");
     info!("loaded fragment shader");
-    
+
     let render_pass = {
         let colour_attachment = Attachment {
             format: Some(context.surface_colour_format),
@@ -89,10 +116,42 @@ fn run_loop(window: &mut Window) {
                     .targets
                     .push(ColorBlendDesc(ColorMask::ALL, BlendState::ALPHA));
 
-        backend.device.create_graphics_pipeline(&pipeline_desc, None)
+        pipeline_desc.vertex_buffers.push(VertexBufferDesc {
+            binding: 0,
+            stride: std::mem::size_of::<Vertex>() as u32,
+            rate: 0
+        });
+
+        pipeline_desc.attributes.push(AttributeDesc {
+            location: 0,
+            binding: 0,
+            element: Element {
+                format: Format::Rgb32Float,
+                offset: 0
+            }
+        });
+        pipeline_desc.attributes.push(AttributeDesc {
+            location: 1,
+            binding: 0,
+            element: Element {
+                format: Format::Rgba32Float,
+                offset: 12
+            }
+        });
+        context.device.create_graphics_pipeline(&pipeline_desc, None)
             .unwrap()
     };
 
+    use jadis::buffer::Buffer;
+    let memory_types = &context.physical_device().memory_properties().memory_types;
+    use jadis::gfx_backend::Backend as ConcreteBackend;
+    let mut vertex_buffer : Buffer<ConcreteBackend> = Buffer::new(
+        &context.device,
+        &MESH,
+        &memory_types,
+        buffer::Usage::VERTEX,
+        Properties::CPU_VISIBLE
+    );
 
     let blackboard = Arc::new(Mutex::new(Blackboard::default()));
     let mut input_handler = InputHandler::new(blackboard.clone());
@@ -170,6 +229,7 @@ fn run_loop(window: &mut Window) {
             command_buffer.set_viewports(0, &[viewport.clone()]);
             command_buffer.set_scissors(0, &[viewport.rect]);
             command_buffer.bind_graphics_pipeline(&pipeline);
+            command_buffer.bind_vertex_buffers(0, vec![(vertex_buffer.buffer.as_ref().unwrap(), 0)]);
 
             {
                 let mut encoder = command_buffer.begin_render_pass_inline(
@@ -179,7 +239,8 @@ fn run_loop(window: &mut Window) {
                     clear_colours,
                 );
 
-                encoder.draw(0..3, 0..1);
+                let num_vertices = MESH.len() as u32;
+                encoder.draw(0..num_vertices, 0..1);
             }
 
             command_buffer.finish()

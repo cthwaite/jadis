@@ -88,6 +88,11 @@ impl<B: gfx_hal::Backend> Context<B> {
         }
     }
 
+    pub fn physical_device(&self) -> &B::PhysicalDevice {
+        let actual_adapter = &self.available_adapters[self.adapter];
+        &actual_adapter.physical_device
+    }
+
     pub fn get_compatibility(&self) -> (SurfaceCapabilities, Option<Vec<Format>>, Vec<gfx_hal::PresentMode>) {
         let actual_adapter = &self.available_adapters[self.adapter];
         let physical_device = &actual_adapter.physical_device;
