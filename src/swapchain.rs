@@ -41,7 +41,6 @@ impl<B: gfx_hal::Backend> SwapchainState<B> {
         let (swapchain, back_buffer) = backend.create_swapchain(swap_config, None);
         self.swapchain = Some(swapchain);
         self.back_buffer = Some(back_buffer);
-        info!("{:?}", extent);
         self.extent = extent;
     }
 
