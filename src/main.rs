@@ -174,7 +174,8 @@ fn run_loop(window: &mut Window) {
 
     info!("starting main loop");
     let mut swapchain = SwapchainState::new(&mut context);
-    let mut swapchain_stuff : Option<(_, _)> = None;
+    let mut framebuffer_state = FramebufferState::new(&context, &render_pass, &mut swapchain);
+
     'main: loop {
         window.events_loop.poll_events(|event| input_handler.handle_event(event));
 
@@ -184,23 +185,11 @@ fn run_loop(window: &mut Window) {
             bb.reset();
             ret
         };
-        if (should_quit ||should_rebuild_swapchain) && swapchain_stuff.is_some() {
-            // Take ownership of swapchain_stuff contents.
-            let (frame_views, framebuffers) = swapchain_stuff.take().unwrap();
-
-            // Wait for all queues to be idle and reset the comand pool, so that
-            // we know no commands are being executed while we destroy the
-            // swapchain.
+        if (should_quit ||should_rebuild_swapchain) && framebuffer_state.is_some() {
             context.device.wait_idle().unwrap();
             command_pool.reset();
 
-            for framebuffer in framebuffers {
-                context.device.destroy_framebuffer(framebuffer);
-            }
-
-            for image_view in frame_views {
-                context.device.destroy_image_view(image_view);
-            }
+            framebuffer_state.destroy(&context.device);
 
             swapchain.destroy(&context.device);
         }
@@ -210,37 +199,14 @@ fn run_loop(window: &mut Window) {
             break 'main;
         }
 
-        if swapchain_stuff.is_none() || should_rebuild_swapchain {
+        if framebuffer_state.is_none() || should_rebuild_swapchain {
             info!("rebuilding swapchain");
             swapchain.rebuild(&mut context);
-            let back_buffer = swapchain.back_buffer.take().unwrap();
-            let extent = swapchain.extent.clone();
 
-            let (frame_views, framebuffers) = match back_buffer {
-                Backbuffer::Images(images) => {
-                    let color_range = SubresourceRange {
-                        aspects: Aspects::COLOR,
-                        levels: 0..1,
-                        layers: 0..1,
-                    };
-
-                    let image_views = context.map_to_image_views(
-                        &images,
-                        ViewKind::D2,
-                        Swizzle::NO,
-                        color_range.clone(),
-                    ).unwrap();
-                    let fbos = context.image_views_to_fbos(&image_views, &render_pass, extent).unwrap();
-
-                    (image_views, fbos)
-                }
-                Backbuffer::Framebuffer(fbo) => (Vec::new(), vec![fbo]),
-            };
-
-            swapchain_stuff = Some((frame_views, framebuffers));
+            framebuffer_state.rebuild_from_swapchain(&context, &render_pass, &mut swapchain);
         }
 
-        let (_image_views, framebuffers) = swapchain_stuff.as_mut().unwrap();
+        let (_, framebuffers) = framebuffer_state.get_mut();
         let swapchain_itself = swapchain.swapchain.as_mut().unwrap();
 
         command_pool.reset();
