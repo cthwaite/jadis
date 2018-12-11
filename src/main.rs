@@ -26,7 +26,7 @@ struct Vertex {
 
 const MESH: &[Vertex] = &[
     Vertex {
-        position: [0.0, -1.0, 0.0],
+        position: [1.0, -1.0, 0.0],
         colour: [1.0, 0.0, 0.0, 1.0],
     },
     Vertex {
@@ -51,6 +51,55 @@ const MESH: &[Vertex] = &[
     },
 ];
 
+fn build_mesh(width: usize, height: usize) -> Vec<Vertex> {
+    let cell_x = 1.0 / width as f32;
+    let cell_y = 1.0 / height as f32;
+
+    let mut mesh = Vec::with_capacity(width * height * 6);
+
+    for x in 0..width {
+        for y in 0..height {
+            mesh.push(Vertex {
+                position: [-1.0 + (width as f32 * cell_x), -1.0 + (height as f32 * cell_y), 0.0],
+                colour: [1.0, 0.0, 0.0, 1.0],
+            });
+            mesh.push(Vertex {
+                position: [-1.0 + (width as f32 * cell_x) + cell_x, -1.0 + (height as f32 * cell_y) + cell_y, 0.0],
+                colour: [1.0, 0.0, 0.0, 1.0],
+            });
+            mesh.push(Vertex {
+                position: [-1.0 + (width as f32 * cell_x), -1.0 + (height as f32 * cell_y), 0.0],
+                colour: [1.0, 0.0, 0.0, 1.0],
+            });
+            mesh.push(Vertex {
+                position: [-1.0 + (width as f32 * cell_x), -1.0 + (height as f32 * cell_y) + cell_y, 0.0],
+                colour: [1.0, 0.0, 0.0, 1.0],
+            });
+            mesh.push(Vertex {
+                position: [-1.0 + (width as f32 * cell_x) + cell_x, -1.0 + (height as f32 * cell_y), 0.0],
+                colour: [1.0, 0.0, 0.0, 1.0],
+            });
+            mesh.push(Vertex {
+                position: [-1.0 + (width as f32 * cell_x) + cell_x, -1.0 + (height as f32 * cell_y) + cell_y, 0.0],
+                colour: [1.0, 0.0, 0.0, 1.0],
+            });
+        }
+    }
+    return vec![
+        Vertex {
+            position: [-1.0, -1.0, 0.0],
+            colour: [1.0, 0.0, 0.0, 1.0],
+        },
+        Vertex {
+            position: [1.0, -1.0, 0.0],
+            colour: [1.0, 0.0, 0.0, 1.0],
+        },
+        Vertex {
+            position: [-1.0, 1.0, 0.0],
+            colour: [1.0, 0.0, 0.0, 1.0],
+        },
+    ]
+}
 
 fn run_loop(window: &mut Window) {
     let instance = InstanceWrapper::new();
@@ -145,9 +194,10 @@ fn run_loop(window: &mut Window) {
     use jadis::buffer::Buffer;
     let memory_types = &context.physical_device().memory_properties().memory_types;
     use jadis::gfx_backend::Backend as ConcreteBackend;
+    let mesh = build_mesh(4, 4);
     let mut vertex_buffer : Buffer<ConcreteBackend> = Buffer::new(
         &context.device,
-        &MESH,
+        &mesh,
         &memory_types,
         buffer::Usage::VERTEX,
         Properties::CPU_VISIBLE
@@ -302,6 +352,5 @@ fn main() {
     let mut window = Window::new(&config);
 
     run_loop(&mut window);
-
     info!("Done...");
 }
