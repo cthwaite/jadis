@@ -6,6 +6,7 @@ use jadis::gfx_backend;
 use jadis::input::{Blackboard, InputHandler};
 use jadis::shader::{ShaderHandle, ShaderSource};
 use jadis::window::Window;
+use jadis::swapchain::SwapchainState;
 
 use jadis::hal_prelude::*;
 
