@@ -57,32 +57,14 @@ pub struct Buffer<B: gfx_hal::Backend> {
 
 impl<B: gfx_hal::Backend> Buffer<B> {
     /// Create, allocate and populate a new buffer.
-    pub fn new<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], usage: buffer::Usage, properties: Properties) -> Result<Self, BufferError> {
+    pub fn new<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], properties: Properties, usage: buffer::Usage) -> Result<Self, BufferError> {
         let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, usage, properties)?;
         buf.fill(device, data);
         Ok(buf)
     }
 
-    /// Create, allocate and populate a new uniform buffer.
-    pub fn new_uniform<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], properties: Properties) -> Result<Self, BufferError> {
-        let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, buffer::Usage::UNIFORM, properties)?;
-        buf.fill(device, data);
-        Ok(buf)
-    }
-
-    /// Check if the buffer is empty.
-    pub fn is_empty(&self) -> bool {
-        self.memory.is_none() || self.size == 0
-    }
-
-    /// Check if the buffer is large enough to store the passed array.
-    pub fn can_hold<T: Copy>(&self, data: &[T]) -> bool {
-        let stride = ::std::mem::size_of::<T>() as u64;
-        let buffer_len = data.len() as u64 * stride;
-        buffer_len <= self.size
-    }
     /// Create a new empty buffer to hold `size` objects of type T.
-    pub fn new_empty<T: Copy>(device: &B::Device, size: usize, memory_types: &[MemoryType], usage: buffer::Usage, properties: Properties) -> Result<Self, BufferError> {
+    pub fn new_empty<T: Copy>(device: &B::Device, size: usize, memory_types: &[MemoryType], properties: Properties, usage: buffer::Usage) -> Result<Self, BufferError> {
         let stride = ::std::mem::size_of::<T>() as u64;
         let buffer_len = size as u64 * stride;
 
@@ -107,6 +89,30 @@ impl<B: gfx_hal::Backend> Buffer<B> {
             memory: Some(buffer_memory),
             size: mem_req.size,
         })
+    }
+
+    /// Create, allocate and populate a new uniform buffer.
+    pub fn new_uniform<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], properties: Properties) -> Result<Self, BufferError> {
+        let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, buffer::Usage::UNIFORM, properties)?;
+        buf.fill(device, data);
+        Ok(buf)
+    }
+
+    /// Get the size of the buffer.
+    pub fn len(&self) -> u64 {
+        self.size
+    }
+
+    /// Check if the buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.memory.is_none() || self.size == 0
+    }
+
+    /// Check if the buffer is large enough to store the passed array.
+    pub fn can_hold<T: Copy>(&self, data: &[T]) -> bool {
+        let stride = ::std::mem::size_of::<T>() as u64;
+        let buffer_len = data.len() as u64 * stride;
+        buffer_len <= self.size
     }
 
     // Fill the buffer with data.
