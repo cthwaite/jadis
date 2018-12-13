@@ -63,9 +63,11 @@ impl<B: gfx_hal::Backend> Buffer<B> {
         Ok(buf)
     }
 
-    /// Get the size of the buffer.
-    pub fn len(&self) -> u64 {
-        self.size
+    /// Create, allocate and populate a new uniform buffer.
+    pub fn new_uniform<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], properties: Properties) -> Result<Self, BufferError> {
+        let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, buffer::Usage::UNIFORM, properties)?;
+        buf.fill(device, data);
+        Ok(buf)
     }
 
     /// Check if the buffer is empty.
