@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use jadis::context::{Context, InstanceWrapper};
 use jadis::config::Config;
-use jadis::input::{Blackboard, InputHandler};
+use jadis::input::{Blackboard, RootEventHandler};
 use jadis::shader::{ShaderHandle, ShaderSource};
 use jadis::window::Window;
 use jadis::swapchain::{FramebufferState, SwapchainState};
@@ -108,7 +108,7 @@ fn run_loop(window: &mut Window) {
     let source = ShaderSource::from_glsl_path("assets\\mesh.vert").expect("Couldn't find fragment shader");
     let mut vert = ShaderHandle::new(&context.device, source).expect("failed to load fragment shader");
     info!("loaded vertex shader");
-    
+
     let source = ShaderSource::from_glsl_path("assets\\mesh.frag").expect("Couldn't find vertex shader");
     let mut frag = ShaderHandle::new(&context.device, source).expect("failed to load vertex shader");
     info!("loaded fragment shader");
@@ -203,8 +203,8 @@ fn run_loop(window: &mut Window) {
         Properties::CPU_VISIBLE
     );
 
-    let blackboard = Arc::new(Mutex::new(Blackboard::default()));
-    let mut input_handler = InputHandler::new(blackboard.clone());
+    let mut blackboard = Blackboard::default();
+    let mut event_handler = RootEventHandler::default();
 
 
     let mut command_pool = context.create_command_pool(16);
@@ -220,15 +220,12 @@ fn run_loop(window: &mut Window) {
     let mut framebuffer_state = FramebufferState::new(&context, &render_pass, &mut swapchain);
 
     'main: loop {
-        window.events_loop.poll_events(|event| input_handler.handle_event(event));
+        blackboard.reset();
+        event_handler.reset();
+        window.events_loop.poll_events(|event| event_handler.handle_event(event));
+        event_handler.sync(&mut blackboard);
 
-        let (should_quit, should_rebuild_swapchain) = {
-            let bb = &mut blackboard.lock().unwrap();
-            let ret = (bb.should_quit, bb.should_rebuild_swapchain);
-            bb.reset();
-            ret
-        };
-        if (should_quit ||should_rebuild_swapchain) && framebuffer_state.is_some() {
+        if (blackboard.should_quit || blackboard.should_rebuild_swapchain) && framebuffer_state.is_some() {
             context.device.wait_idle().unwrap();
             command_pool.reset();
 
@@ -237,13 +234,13 @@ fn run_loop(window: &mut Window) {
             swapchain.destroy(&context.device);
         }
 
-        if should_quit {
+        if blackboard.should_quit {
             info!("got quit signal, breaking from 'main loop");
             break 'main;
         }
 
-        if framebuffer_state.is_none() || should_rebuild_swapchain {
-            info!("rebuilding swapchain");
+        if blackboard.should_rebuild_swapchain || framebuffer_state.is_none() {
+            info!("rebuilding swapchain ({} | {})", blackboard.should_rebuild_swapchain, framebuffer_state.is_none());
             swapchain.rebuild(&mut context);
 
             framebuffer_state.rebuild_from_swapchain(&context, &render_pass, &mut swapchain);
@@ -258,7 +255,7 @@ fn run_loop(window: &mut Window) {
                 Ok(i) => i,
                 Err(_) => {
                     warn!("Rebuilding the swapchain because acquire_image errored");
-                    blackboard.lock().unwrap().should_rebuild_swapchain = true;
+                    blackboard.should_rebuild_swapchain = true;
                     continue 'main;
                 }
             }
@@ -311,7 +308,7 @@ fn run_loop(window: &mut Window) {
 
         if result.is_err() {
             warn!("Rebuilding the swapchain because present errored");
-            blackboard.lock().unwrap().should_rebuild_swapchain = true;
+            blackboard.should_rebuild_swapchain = true;
         }
     }
 
