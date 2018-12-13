@@ -195,13 +195,13 @@ fn run_loop(window: &mut Window) {
     let memory_types = &context.physical_device().memory_properties().memory_types;
     use jadis::gfx_backend::Backend as ConcreteBackend;
     let mesh = build_mesh(4, 4);
-    let mut vertex_buffer : Buffer<ConcreteBackend> = Buffer::new(
+    let vertex_buffer : Buffer<ConcreteBackend> = Buffer::new(
         &context.device,
         &mesh,
         &memory_types,
         buffer::Usage::VERTEX,
         Properties::CPU_VISIBLE
-    );
+    ).expect("Unable to create vertex buffer!");
 
     let mut blackboard = Blackboard::default();
     let mut event_handler = RootEventHandler::default();

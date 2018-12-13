@@ -1,11 +1,52 @@
+use std::error::Error;
+use std::fmt::{self, Display};
+
 use gfx_hal::{
     Backend,
     Device,
-    MemoryType, 
+    MemoryType,
     adapter::MemoryTypeId,
     buffer,
     memory::{Barrier, Dependencies, Properties},
 };
+
+
+#[derive(Debug)]
+pub enum BufferError {
+    AllocationError(gfx_hal::device::AllocationError),
+    BindError(gfx_hal::device::BindError),
+    CreationError(gfx_hal::buffer::CreationError),
+    MappingError(gfx_hal::mapping::Error),
+    NoSuitableMemoryType,
+}
+
+impl Error for BufferError { }
+impl Display for BufferError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            BufferError::NoSuitableMemoryType => {
+                write!(f, "Could not find appropriate vertex buffer memory type.")
+            },
+            _ => write!(f, "{:?}", self)
+        }
+    }
+}
+
+macro_rules! wrap_buf_error {
+    ($src: ty, $dst: ident) => {
+        impl From<$src> for BufferError {
+            fn from(err: $src) -> Self {
+                BufferError::$dst(err)
+            }
+        }
+    }
+}
+
+wrap_buf_error!(gfx_hal::buffer::CreationError, CreationError);
+wrap_buf_error!(gfx_hal::device::BindError, BindError);
+wrap_buf_error!(gfx_hal::mapping::Error, MappingError);
+wrap_buf_error!(gfx_hal::device::AllocationError, AllocationError);
+
 
 /// Buffer data structure.
 pub struct Buffer<B: gfx_hal::Backend> {
@@ -16,22 +57,36 @@ pub struct Buffer<B: gfx_hal::Backend> {
 
 impl<B: gfx_hal::Backend> Buffer<B> {
     /// Create, allocate and populate a new buffer.
-    pub fn new<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], usage: buffer::Usage, properties: Properties) -> Self {
-        let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, usage, properties);
+    pub fn new<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], usage: buffer::Usage, properties: Properties) -> Result<Self, BufferError> {
+        let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, usage, properties)?;
         buf.fill(device, data);
-        buf
+        Ok(buf)
     }
 
-    /// Create a new empty buffer to hold entities of type T.
-    pub fn new_empty<T: Copy>(device: &B::Device, size: usize, memory_types: &[MemoryType], usage: buffer::Usage, properties: Properties) -> Self {
+    /// Get the size of the buffer.
+    pub fn len(&self) -> u64 {
+        self.size
+    }
+
+    /// Check if the buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.memory.is_none() || self.size == 0
+    }
+
+    /// Check if the buffer is large enough to store the passed array.
+    pub fn can_hold<T: Copy>(&self, data: &[T]) -> bool {
+        let stride = ::std::mem::size_of::<T>() as u64;
+        let buffer_len = data.len() as u64 * stride;
+        buffer_len <= self.size
+    }
+    /// Create a new empty buffer to hold `size` objects of type T.
+    pub fn new_empty<T: Copy>(device: &B::Device, size: usize, memory_types: &[MemoryType], usage: buffer::Usage, properties: Properties) -> Result<Self, BufferError> {
         let stride = ::std::mem::size_of::<T>() as u64;
         let buffer_len = size as u64 * stride;
-        
-        // TODO: return result.
-        let unbound_buffer = device.create_buffer(buffer_len, usage).unwrap();
+
+        let unbound_buffer = device.create_buffer(buffer_len, usage)?;
         let mem_req = device.get_buffer_requirements(&unbound_buffer);
-        
-        // TODO: return result.
+
         let upload_type = memory_types
             .iter()
             .enumerate()
@@ -40,44 +95,44 @@ impl<B: gfx_hal::Backend> Buffer<B> {
                 type_supported && ty.properties.contains(properties)
             })
             .map(|(id, _ty)| MemoryTypeId(id))
-            .expect("Could not find appropriate vertex buffer memory type.");
-        // TODO: return result.
-        let buffer_memory = device.allocate_memory(upload_type, mem_req.size).unwrap();
-        // TODO: return result.
-        let buffer = device
-            .bind_buffer_memory(&buffer_memory, 0, unbound_buffer)
-            .unwrap();
+            .ok_or(BufferError::NoSuitableMemoryType)?;
 
-        Buffer {
+        let buffer_memory = device.allocate_memory(upload_type, mem_req.size)?;
+        let buffer = device.bind_buffer_memory(&buffer_memory, 0, unbound_buffer)?;
+
+        Ok(Buffer {
             buffer: Some(buffer),
             memory: Some(buffer_memory),
             size: mem_req.size,
-        }
+        })
     }
 
     // Fill the buffer with data.
-    pub fn fill<T: Copy>(&mut self, device: &B::Device, data: &[T]) {
+    pub fn fill<T: Copy>(&mut self, device: &B::Device, data: &[T]) -> Result<(), BufferError> {
+        assert!(self.memory.is_some());
         let stride = ::std::mem::size_of::<T>() as u64;
         let buffer_len = data.len() as u64 * stride;
 
-        // TODO: check that incoming data fits in buffer.
-        // TODO: check that we're currently in a valid state.
+        assert!(buffer_len as u64 <= self.size);
 
-        let mut dest = device.acquire_mapping_writer::<T>(self.memory.as_ref().unwrap(), 0..buffer_len)
-                            .unwrap();
+        let memory = self.memory.as_ref().unwrap();
+
+        // TODO: return result
+        let mut dest = device.acquire_mapping_writer::<T>(memory, 0..buffer_len)?;
         dest.copy_from_slice(data);
         device.release_mapping_writer(dest);
+        Ok(())
     }
 
     // Destroy the buffer.
-	pub fn destroy(&mut self, device: &B::Device) {
+    pub fn destroy(&mut self, device: &B::Device) {
         if let Some(buffer) = self.buffer.take() {
-		    device.destroy_buffer(buffer);
+            device.destroy_buffer(buffer);
         }
         if let Some(memory) = self.memory.take() {
-		    device.free_memory(memory);
+            device.free_memory(memory);
         }
-	}
+    }
 }
 
 
