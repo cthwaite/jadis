@@ -1,24 +1,20 @@
 use crate::hal_prelude::*;
 #[cfg(not(feature = "gl"))]
 use crate::window::Window;
-use gfx_hal::{
-    window::SurfaceCapabilities,
-};
+use gfx_hal::window::SurfaceCapabilities;
 
-use log::{info};
-
+use log::info;
 
 pub struct InstanceWrapper {
     #[cfg(not(feature = "gl"))]
     instance: gfx_backend::Instance,
 }
 
-
 impl InstanceWrapper {
     pub fn new() -> Self {
         InstanceWrapper {
             #[cfg(not(feature = "gl"))]
-            instance: gfx_backend::Instance::create("jadis", 1)
+            instance: gfx_backend::Instance::create("jadis", 1),
         }
     }
 
@@ -26,29 +22,35 @@ impl InstanceWrapper {
     pub fn create_context(&self, window: &Window) -> Context<gfx_backend::Backend> {
         Context::new(
             self.instance.create_surface(&window.window),
-            self.instance.enumerate_adapters())
+            self.instance.enumerate_adapters(),
+        )
     }
 
     #[cfg(feature = "gl")]
-    pub fn create_context(&self, window: gfx_backend::glutin::GlWindow) -> Context<gfx_backend::Backend> {
-
+    pub fn create_context(
+        &self,
+        window: gfx_backend::glutin::GlWindow,
+    ) -> Context<gfx_backend::Backend> {
         let surface = gfx_backend::Surface::from_window(window);
         let adapters = surface.enumerate_adapters();
         Context::new(surface, adapters)
     }
 }
 
-
 /// Get preferred adapter according to some ordering criterion.
 pub fn get_preferred_adapter<B, O, F>(adapters: &[gfx_hal::Adapter<B>], criterion: F) -> usize
-    where 
+where
     B: gfx_hal::Backend,
     O: Ord,
-    F: FnMut(&(usize, &gfx_hal::Adapter<B>)) -> O {
-    adapters.into_iter()
-            .enumerate().min_by_key(criterion).unwrap().0
+    F: FnMut(&(usize, &gfx_hal::Adapter<B>)) -> O,
+{
+    adapters
+        .into_iter()
+        .enumerate()
+        .min_by_key(criterion)
+        .unwrap()
+        .0
 }
-
 
 pub struct Context<B: gfx_hal::Backend> {
     adapter: usize,
@@ -61,9 +63,15 @@ pub struct Context<B: gfx_hal::Backend> {
 }
 
 impl<B: gfx_hal::Backend> Context<B> {
-    pub fn new(surface: <B as gfx_hal::Backend>::Surface, mut available_adapters: Vec<gfx_hal::Adapter<B>>) -> Self {        
+    pub fn new(
+        surface: <B as gfx_hal::Backend>::Surface,
+        mut available_adapters: Vec<gfx_hal::Adapter<B>>,
+    ) -> Self {
         for adapter in &available_adapters {
-            info!("Found adapter: {} ({:?})", adapter.info.name, adapter.info.device_type);
+            info!(
+                "Found adapter: {} ({:?})",
+                adapter.info.name, adapter.info.device_type
+            );
         }
 
         let adapter = get_preferred_adapter(&available_adapters, |(_index, adapter)| {
@@ -78,10 +86,15 @@ impl<B: gfx_hal::Backend> Context<B> {
         });
         let (device, physical_device, queue_group) = {
             let actual_adapter = &mut available_adapters[adapter];
-            info!("==> Using adapter: {} ({:?})", actual_adapter.info.name, actual_adapter.info.device_type);
+            info!(
+                "==> Using adapter: {} ({:?})",
+                actual_adapter.info.name, actual_adapter.info.device_type
+            );
             let num_queues = 1;
             let (device, queue_group) = actual_adapter
-                .open_with::<_, Graphics>(num_queues, |family| surface.supports_queue_family(family))
+                .open_with::<_, Graphics>(num_queues, |family| {
+                    surface.supports_queue_family(family)
+                })
                 .unwrap();
             let physical_device = &actual_adapter.physical_device;
 
@@ -107,18 +120,39 @@ impl<B: gfx_hal::Backend> Context<B> {
         &actual_adapter.physical_device
     }
 
-    pub fn get_compatibility(&self) -> (SurfaceCapabilities, Option<Vec<Format>>, Vec<gfx_hal::PresentMode>) {
+    pub fn get_compatibility(
+        &self,
+    ) -> (
+        SurfaceCapabilities,
+        Option<Vec<Format>>,
+        Vec<gfx_hal::PresentMode>,
+    ) {
         let actual_adapter = &self.available_adapters[self.adapter];
         let physical_device = &actual_adapter.physical_device;
         self.surface.compatibility(physical_device)
     }
 
-    pub fn create_command_pool(&self, max_buffers: usize) -> gfx_hal::CommandPool<B, gfx_hal::queue::capability::Graphics> {
-        self.device.create_command_pool_typed(&self.queue_group, CommandPoolCreateFlags::empty(), max_buffers).unwrap()
+    pub fn create_command_pool(
+        &self,
+        max_buffers: usize,
+    ) -> gfx_hal::CommandPool<B, gfx_hal::queue::capability::Graphics> {
+        self.device
+            .create_command_pool_typed(
+                &self.queue_group,
+                CommandPoolCreateFlags::empty(),
+                max_buffers,
+            )
+            .unwrap()
     }
 
-    pub fn create_swapchain(&mut self, config: SwapchainConfig, old_swapchain: Option<B::Swapchain>) -> (B::Swapchain, gfx_hal::Backbuffer<B>) {
-        self.device.create_swapchain(&mut self.surface, config, old_swapchain).expect("Failed to create swapchain!")
+    pub fn create_swapchain(
+        &mut self,
+        config: SwapchainConfig,
+        old_swapchain: Option<B::Swapchain>,
+    ) -> (B::Swapchain, gfx_hal::Backbuffer<B>) {
+        self.device
+            .create_swapchain(&mut self.surface, config, old_swapchain)
+            .expect("Failed to create swapchain!")
     }
 
     pub fn map_to_image_views(
@@ -126,10 +160,12 @@ impl<B: gfx_hal::Backend> Context<B> {
         images: &[B::Image],
         view_kind: ViewKind,
         swizzle: Swizzle,
-        range: SubresourceRange) -> Result<Vec<B::ImageView>, ViewError> {
-        images.iter()
-                .map(|image| self.create_image_view(image, view_kind, swizzle, range.clone()))
-                .collect()
+        range: SubresourceRange,
+    ) -> Result<Vec<B::ImageView>, ViewError> {
+        images
+            .iter()
+            .map(|image| self.create_image_view(image, view_kind, swizzle, range.clone()))
+            .collect()
     }
 
     pub fn create_image_view(
@@ -137,35 +173,36 @@ impl<B: gfx_hal::Backend> Context<B> {
         image: &B::Image,
         view_kind: ViewKind,
         swizzle: Swizzle,
-        range: SubresourceRange) -> Result<B::ImageView, ViewError> {
-        self.device.create_image_view(image,
-                                      view_kind,
-                                      self.surface_colour_format,
-                                      swizzle,
-                                      range)
+        range: SubresourceRange,
+    ) -> Result<B::ImageView, ViewError> {
+        self.device
+            .create_image_view(image, view_kind, self.surface_colour_format, swizzle, range)
     }
 
     pub fn image_views_to_fbos(
-            &self,
-            image_views: &[B::ImageView],
-            render_pass: &B::RenderPass,
-            extent: Extent) -> Result<Vec<B::Framebuffer>, gfx_hal::device::OutOfMemory> {
+        &self,
+        image_views: &[B::ImageView],
+        render_pass: &B::RenderPass,
+        extent: Extent,
+    ) -> Result<Vec<B::Framebuffer>, gfx_hal::device::OutOfMemory> {
         image_views
             .iter()
             .map(|image_view| {
                 self.device
                     .create_framebuffer(&render_pass, vec![image_view], extent)
-            }).collect()
+            })
+            .collect()
     }
 
-    /// We pick a colour format from the list of supported formats. If there 
+    /// We pick a colour format from the list of supported formats. If there
     /// is no list, we default to 'Rgba8Srgb'.
     fn pick_surface_colour_format(formats: Option<Vec<Format>>) -> Format {
         match formats {
-                Some(choices) => choices.into_iter()
-                                        .find(|format| format.base_format().1 == ChannelType::Srgb)
-                                        .unwrap(),
-                None => Format::Rgba8Srgb,
-            }
+            Some(choices) => choices
+                .into_iter()
+                .find(|format| format.base_format().1 == ChannelType::Srgb)
+                .unwrap(),
+            None => Format::Rgba8Srgb,
+        }
     }
 }
