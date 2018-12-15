@@ -68,7 +68,7 @@ impl<B: gfx_hal::Backend> Buffer<B> {
 
     /// Create a new empty buffer to hold `size` objects of type T.
     pub fn new_empty<T: Copy>(device: &B::Device, size: usize, memory_types: &[MemoryType], properties: Properties, usage: buffer::Usage) -> Result<Self, BufferError> {
-        let (buffer, buffer_memory, size) = Buffer::<B>::empty(device, size, memory_types, properties, usage)?;
+        let (buffer, buffer_memory, size) = Buffer::<B>::empty::<T>(device, size, memory_types, properties, usage)?;
 
         Ok(Buffer {
             buffer: Some(buffer),
@@ -83,7 +83,7 @@ impl<B: gfx_hal::Backend> Buffer<B> {
         memory_types: &[MemoryType],
         properties: Properties,
         usage: buffer::Usage,
-    ) -> Result<(B::Buffer, B::Memory, usize), BufferError> {
+    ) -> Result<(B::Buffer, B::Memory, u64), BufferError> {
         let stride = ::std::mem::size_of::<T>() as u64;
         let buffer_len = size as u64 * stride;
 
@@ -108,10 +108,6 @@ impl<B: gfx_hal::Backend> Buffer<B> {
             buffer_memory,
             mem_req.size,
         ))
-    }
-
-    pub fn acquire_mapping_writer(&mut self, device: &B::Device) -> Result<(), BufferError> {
-        device.acquire_mapping_writer::<u8>(&self.memory, 0..self.size)?
     }
 
     /// Create, allocate and populate a new uniform buffer.
