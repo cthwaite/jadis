@@ -2,12 +2,10 @@ use std::error::Error;
 use std::fmt::{self, Display};
 
 use gfx_hal::{
-    Backend,
-    Device,
-    MemoryType,
     adapter::MemoryTypeId,
     buffer,
-    memory::{Barrier, Dependencies, Properties},
+    memory::{Properties},
+    Backend, Device, MemoryType,
 };
 
 
