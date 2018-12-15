@@ -28,12 +28,15 @@ impl Default for WindowConfig {
 }
 
 impl WindowConfig {
-    pub fn build(&self, events_loop: &EventsLoop) -> Result<winit::Window, winit::CreationError> {
-        return WindowBuilder::new()
+    pub fn get_builder(&self) -> WindowBuilder {
+        WindowBuilder::new()
                 .with_title("jadis")
                 .with_dimensions((self.width, self.height).into())
                 .with_decorations(self.decorations)
-                .build(&events_loop)
+    }
+    pub fn build(&self, events_loop: &EventsLoop) -> Result<winit::Window, winit::CreationError> {
+        self.get_builder()
+            .build(&events_loop)
     }
 }
 

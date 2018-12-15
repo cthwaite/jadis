@@ -101,15 +101,37 @@ fn build_mesh(width: usize, height: usize) -> Vec<Vertex> {
     ]
 }
 
-fn run_loop(window: &mut Window) {
-    let instance = InstanceWrapper::new();
-    let mut context = instance.create_context(&window);
+fn run_loop(config: &Config) {
 
-    let source = ShaderSource::from_glsl_path("assets\\mesh.vert").expect("Couldn't find fragment shader");
+    #[cfg(not(feature = "gl"))]
+    let (mut window, instance, mut context) = {
+        let instance = InstanceWrapper::new();
+        let mut window = Window::new(&config);
+        let mut context = instance.create_context(&window);
+        (window, instance, context)
+    };
+
+    #[cfg(feature = "gl")]
+    let (mut window, instance, mut context) = {
+        let instance = InstanceWrapper::new();
+        let mut window = Window::new(&config);
+        let mut context = instance.create_context(window.window.take().unwrap());
+        (window, instance, context)
+    };
+
+    #[cfg(os = "windows")]
+    let vert_path = "assets\\mesh.vert";
+    #[cfg(not(os = "windows"))]
+    let vert_path = "assets/mesh.vert";
+    let source = ShaderSource::from_glsl_path(vert_path).expect("Couldn't find fragment shader");
     let mut vert = ShaderHandle::new(&context.device, source).expect("failed to load fragment shader");
     info!("loaded vertex shader");
 
-    let source = ShaderSource::from_glsl_path("assets\\mesh.frag").expect("Couldn't find vertex shader");
+    #[cfg(os = "windows")]
+    let frag_path = "assets\\mesh.frag";
+    #[cfg(not(os = "windows"))]
+    let frag_path = "assets/mesh.frag";
+    let source = ShaderSource::from_glsl_path(frag_path).expect("Couldn't find vertex shader");
     let mut frag = ShaderHandle::new(&context.device, source).expect("failed to load vertex shader");
     info!("loaded fragment shader");
 
@@ -346,8 +368,7 @@ fn load_config() -> Config {
 
 fn main() {
     let config = load_config();
-    let mut window = Window::new(&config);
 
-    run_loop(&mut window);
+    run_loop(&config);
     info!("Done...");
 }

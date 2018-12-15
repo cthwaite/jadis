@@ -1,4 +1,5 @@
 use crate::hal_prelude::*;
+#[cfg(not(feature = "gl"))]
 use crate::window::Window;
 use gfx_hal::{
     window::SurfaceCapabilities,
@@ -8,22 +9,35 @@ use log::{info};
 
 
 pub struct InstanceWrapper {
+    #[cfg(not(feature = "gl"))]
     instance: gfx_backend::Instance,
 }
+
 
 impl InstanceWrapper {
     pub fn new() -> Self {
         InstanceWrapper {
+            #[cfg(not(feature = "gl"))]
             instance: gfx_backend::Instance::create("jadis", 1)
         }
     }
 
+    #[cfg(not(feature = "gl"))]
     pub fn create_context(&self, window: &Window) -> Context<gfx_backend::Backend> {
         Context::new(
             self.instance.create_surface(&window.window),
             self.instance.enumerate_adapters())
     }
+
+    #[cfg(feature = "gl")]
+    pub fn create_context(&self, window: gfx_backend::glutin::GlWindow) -> Context<gfx_backend::Backend> {
+
+        let surface = gfx_backend::Surface::from_window(window);
+        let adapters = surface.enumerate_adapters();
+        Context::new(surface, adapters)
+    }
 }
+
 
 /// Get preferred adapter according to some ordering criterion.
 pub fn get_preferred_adapter<B, O, F>(adapters: &[gfx_hal::Adapter<B>], criterion: F) -> usize
