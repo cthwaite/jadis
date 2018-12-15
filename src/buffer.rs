@@ -90,9 +90,7 @@ impl<B: gfx_hal::Backend> Buffer<B> {
     }
 
     /// Create, allocate and populate a new uniform buffer.
-    pub fn new_uniform<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], properties: Properties) -> Result<Self, BufferError> {
-        let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, properties, buffer::Usage::UNIFORM)?;
-        buf.fill(device, data);
+        buf.fill(device, data)?;
         Ok(buf)
     }
 
