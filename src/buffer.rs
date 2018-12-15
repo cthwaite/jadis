@@ -59,7 +59,7 @@ impl<B: gfx_hal::Backend> Buffer<B> {
     /// Create, allocate and populate a new buffer.
     pub fn new<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], properties: Properties, usage: buffer::Usage) -> Result<Self, BufferError> {
         let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, properties, usage)?;
-        buf.fill(device, data);
+        buf.fill(device, data)?;
         Ok(buf)
     }
 
