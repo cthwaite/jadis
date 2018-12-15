@@ -16,11 +16,11 @@ pub use gfx_hal::{
     adapter::MemoryTypeId,
     buffer,
     command::{BufferImageCopy, ClearColor, ClearDepthStencil, ClearValue},
-    device::{ShaderError},
+    device::ShaderError,
     format::{Aspects, ChannelType, Format, Swizzle},
     image::{
         self as img, Access, Extent, Filter, Layout, Offset, SubresourceLayers, SubresourceRange,
-        ViewCapabilities, ViewKind, WrapMode, ViewError,
+        ViewCapabilities, ViewError, ViewKind, WrapMode,
     },
     memory::{Barrier, Dependencies, Properties},
     pass::{
@@ -34,7 +34,6 @@ pub use gfx_hal::{
         DescriptorType, Element, EntryPoint, GraphicsPipelineDesc, GraphicsShaderSet,
         PipelineStage, Rasterizer, Rect, ShaderStageFlags, StencilTest, VertexBufferDesc, Viewport,
     },
-    
     queue::Submission,
     window::Extent2D,
 };
