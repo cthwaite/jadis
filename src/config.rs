@@ -8,7 +8,6 @@ use serde_derive::{Deserialize, Serialize};
 use toml;
 use winit::{EventsLoop, WindowBuilder};
 
-
 #[serde(default)]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct WindowConfig {
@@ -28,15 +27,16 @@ impl Default for WindowConfig {
 }
 
 impl WindowConfig {
+    pub fn get_builder(&self) -> WindowBuilder {
+        WindowBuilder::new()
+            .with_title("jadis")
+            .with_dimensions((self.width, self.height).into())
+            .with_decorations(self.decorations)
+    }
     pub fn build(&self, events_loop: &EventsLoop) -> Result<winit::Window, winit::CreationError> {
-        return WindowBuilder::new()
-                .with_title("jadis")
-                .with_dimensions((self.width, self.height).into())
-                .with_decorations(self.decorations)
-                .build(&events_loop)
+        self.get_builder().build(&events_loop)
     }
 }
-
 
 #[serde(default)]
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -72,8 +72,7 @@ impl LoggingConfig {
         if self.log_stdout {
             dispatch = dispatch.chain(std::io::stdout());
         }
-        
-        
+
         if let Some(path) = &self.log_file {
             dispatch = dispatch.chain(fern::log_file(&path)?);
         }
@@ -81,7 +80,6 @@ impl LoggingConfig {
         Ok(())
     }
 }
-
 
 #[serde(default)]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -98,7 +96,7 @@ impl Config {
                 let mut config = String::new();
                 reader.read_to_string(&mut config).unwrap();
                 config
-            },
+            }
             Err(err) => {
                 eprintln!("{}", err);
                 return Ok(Default::default());

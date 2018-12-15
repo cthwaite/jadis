@@ -4,6 +4,13 @@ version = "0.0.1"
 authors = ["kthwaite"]
 edition = "2018"
 
+[features]
+default = ["gl"]
+metal = ["gfx-backend-metal"]
+gl = ["gfx-backend-gl"]
+dx12 = ["gfx-backend-dx12"]
+vulkan = ["gfx-backend-vulkan"]
+
 [dependencies]
 # graphics
 glsl-to-spirv = "=0.1.6"
@@ -18,25 +25,31 @@ chrono = "*"
 log = { version = "0.4", features = ["serde"] }
 fern = "0.5"
 
+
 [dependencies.gfx-hal]
 git = "https://github.com/gfx-rs/gfx"
 rev = "8f11f52"
 
+[dependencies.gfx-backend-gl]
+git = "https://github.com/gfx-rs/gfx"
+rev = "8f11f52"
+features = ["glutin"]
+optional = true
+
 [target.'cfg(target_os = "macos")'.dependencies.gfx-backend-metal]
 git = "https://github.com/gfx-rs/gfx"
 rev = "8f11f52"
+optional = true
 
 [target.'cfg(windows)'.dependencies.gfx-backend-dx12]
 git = "https://github.com/gfx-rs/gfx"
 rev = "8f11f52"
+optional = true
 
-[target.'cfg(windows)'.dependencies.gfx-backend-vulkan]
+[target.'cfg(not(target_os = "macos"))'.dependencies.gfx-backend-vulkan]
 git = "https://github.com/gfx-rs/gfx"
 rev = "8f11f52"
-
-[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies.gfx-backend-vulkan]
-git = "https://github.com/gfx-rs/gfx"
-rev = "8f11f52"
+optional = true
 
 [build-dependencies]
 glsl-to-spirv = "=0.1.6"

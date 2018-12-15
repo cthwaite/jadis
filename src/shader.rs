@@ -1,19 +1,18 @@
-use std::path::Path;
-use std::fs::{self, File};
-use std::error::Error;
-use std::io::Read;
 use crate::hal_prelude::*;
 use glsl_to_spirv::ShaderType;
+use std::error::Error;
 use std::fmt;
+use std::fs::{self, File};
+use std::io::Read;
+use std::path::Path;
 
 type ShaderModule<B> = <B as gfx_hal::Backend>::ShaderModule;
-
 
 #[derive(Debug)]
 pub enum ShaderHandleError {
     LoadFail(std::io::Error),
     ShaderFail(gfx_hal::device::ShaderError),
-    Other(String)
+    Other(String),
 }
 impl From<String> for ShaderHandleError {
     fn from(err: String) -> Self {
@@ -37,17 +36,19 @@ impl fmt::Display for ShaderHandleError {
         write!(f, "{:?}", self)
     }
 }
-impl Error for ShaderHandleError {
-}
+impl Error for ShaderHandleError {}
 
-pub fn compile_to_spirv(source: &str, shader_type: &ShaderType) -> Result<Vec<u8>, ShaderHandleError> {
+pub fn compile_to_spirv(
+    source: &str,
+    shader_type: &ShaderType,
+) -> Result<Vec<u8>, ShaderHandleError> {
     let mut compiled_file = glsl_to_spirv::compile(source, shader_type.clone())?;
     let mut compiled_bytes = Vec::new();
     compiled_file.read_to_end(&mut compiled_bytes)?;
     Ok(compiled_bytes)
 }
 
-/// 
+///
 #[derive(Debug)]
 pub enum ShaderSource {
     GLSLFile(ShaderType, String),
@@ -59,21 +60,25 @@ pub enum ShaderSource {
 impl ShaderSource {
     pub fn from_glsl_path(path: &str) -> Option<ShaderSource> {
         let sys_path = Path::new(path);
-        let shader_type = sys_path.extension().and_then(|ext| {
-            match ext.to_string_lossy().as_ref() {
-                "vert" => Some(ShaderType::Vertex),
-                "vs" => Some(ShaderType::Vertex),
-                "frag" => Some(ShaderType::Fragment),
-                "fs" => Some(ShaderType::Fragment),
-                "geom" => Some(ShaderType::Geometry),
-                "gs" => Some(ShaderType::Geometry),
-                _ => None,
-            }
-        });
+        let shader_type =
+            sys_path
+                .extension()
+                .and_then(|ext| match ext.to_string_lossy().as_ref() {
+                    "vert" => Some(ShaderType::Vertex),
+                    "vs" => Some(ShaderType::Vertex),
+                    "frag" => Some(ShaderType::Fragment),
+                    "fs" => Some(ShaderType::Fragment),
+                    "geom" => Some(ShaderType::Geometry),
+                    "gs" => Some(ShaderType::Geometry),
+                    _ => None,
+                });
         if shader_type.is_none() {
             return None;
         }
-        Some(ShaderSource::GLSLFile(shader_type.unwrap(), path.to_owned()))
+        Some(ShaderSource::GLSLFile(
+            shader_type.unwrap(),
+            path.to_owned(),
+        ))
     }
 }
 
@@ -82,7 +87,6 @@ pub struct ShaderHandle<B: gfx_hal::Backend> {
     source: ShaderSource,
     module: Option<ShaderModule<B>>,
 }
-
 
 impl<B: gfx_hal::Backend> ShaderHandle<B> {
     /// Create a new shader handle using the passed device.
@@ -94,26 +98,27 @@ impl<B: gfx_hal::Backend> ShaderHandle<B> {
         })
     }
 
-    pub fn build_module(device: &B::Device, source: &ShaderSource) -> Result<ShaderModule<B>, ShaderHandleError> {
+    pub fn build_module(
+        device: &B::Device,
+        source: &ShaderSource,
+    ) -> Result<ShaderModule<B>, ShaderHandleError> {
         let result = match source {
             ShaderSource::GLSLFile(shader_type, path) => {
                 let source = fs::read_to_string(path)?;
                 let compiled_spirv = compile_to_spirv(&source, shader_type)?;
                 device.create_shader_module(&compiled_spirv)
-            },
+            }
             ShaderSource::GLSLRaw(shader_type, source) => {
                 let compiled_spirv = compile_to_spirv(&source, shader_type)?;
                 device.create_shader_module(&compiled_spirv)
-            },
+            }
             ShaderSource::SpirVFile(path) => {
                 let mut file = File::open(path)?;
                 let mut buf = Vec::new();
                 let read_size = file.read_to_end(&mut buf)?;
                 device.create_shader_module(&buf)
-            },
-            ShaderSource::SpirVRaw(bytes) => {
-                device.create_shader_module(&bytes)
-           }
+            }
+            ShaderSource::SpirVRaw(bytes) => device.create_shader_module(&bytes),
         };
         result.map_err(|err| err.into())
     }

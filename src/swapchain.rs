@@ -1,14 +1,13 @@
 use gfx_hal;
-use gfx_hal::SwapchainConfig;
-use gfx_hal::image::Extent;
 use gfx_hal::device::Device;
+use gfx_hal::image::Extent;
+use gfx_hal::SwapchainConfig;
 
 use crate::hal_prelude::*;
 
-use log::{info};
+use log::info;
 
 use crate::context::Context;
-
 
 pub struct SwapchainState<B: gfx_hal::Backend> {
     pub swapchain: Option<B::Swapchain>,
@@ -33,7 +32,7 @@ impl<B: gfx_hal::Backend> SwapchainState<B> {
     pub fn is_valid(&self) -> bool {
         self.swapchain.is_some()
     }
-    
+
     /// Rebuild the swapchain.
     pub fn rebuild(&mut self, backend: &mut Context<B>) {
         self.destroy(&backend.device);
@@ -55,14 +54,17 @@ impl<B: gfx_hal::Backend> SwapchainState<B> {
     }
 }
 
-
 pub struct FramebufferState<B: gfx_hal::Backend> {
     framebuffers: Option<Vec<B::Framebuffer>>,
-    image_views: Option<Vec<B::ImageView>>
+    image_views: Option<Vec<B::ImageView>>,
 }
 
 impl<B: gfx_hal::Backend> FramebufferState<B> {
-    pub fn new(context: &Context<B>, render_pass: &B::RenderPass, swap_state: &mut SwapchainState<B>) -> Self {
+    pub fn new(
+        context: &Context<B>,
+        render_pass: &B::RenderPass,
+        swap_state: &mut SwapchainState<B>,
+    ) -> Self {
         let mut fbs = FramebufferState::new_empty();
         fbs.rebuild_from_swapchain(context, render_pass, swap_state);
         fbs
@@ -75,7 +77,12 @@ impl<B: gfx_hal::Backend> FramebufferState<B> {
         }
     }
 
-    pub fn rebuild_from_swapchain(&mut self, context: &Context<B>, render_pass: &B::RenderPass, swap_state: &mut SwapchainState<B>) {
+    pub fn rebuild_from_swapchain(
+        &mut self,
+        context: &Context<B>,
+        render_pass: &B::RenderPass,
+        swap_state: &mut SwapchainState<B>,
+    ) {
         let (image_views, framebuffers) = match swap_state.back_buffer.take().unwrap() {
             Backbuffer::Images(images) => {
                 let color_range = SubresourceRange {
@@ -84,16 +91,15 @@ impl<B: gfx_hal::Backend> FramebufferState<B> {
                     layers: 0..1,
                 };
 
-                let image_views = context.map_to_image_views(
-                    &images,
-                    ViewKind::D2,
-                    Swizzle::NO,
-                    color_range,
-                ).unwrap();
-                let fbos = context.image_views_to_fbos(&image_views, &render_pass, swap_state.extent.clone()).unwrap();
+                let image_views = context
+                    .map_to_image_views(&images, ViewKind::D2, Swizzle::NO, color_range)
+                    .unwrap();
+                let fbos = context
+                    .image_views_to_fbos(&image_views, &render_pass, swap_state.extent.clone())
+                    .unwrap();
 
                 (image_views, fbos)
-            },
+            }
             Backbuffer::Framebuffer(fbo) => (Vec::new(), vec![fbo]),
         };
         self.framebuffers = Some(framebuffers);
