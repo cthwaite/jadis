@@ -51,7 +51,7 @@ wrap_buf_error!(gfx_hal::device::AllocationError, AllocationError);
 /// Buffer data structure.
 pub struct Buffer<B: gfx_hal::Backend> {
     pub buffer: Option<B::Buffer>,
-    memory: Option<B::Memory>,
+    pub memory: Option<B::Memory>,
     size: u64,
 }
 
@@ -65,6 +65,21 @@ impl<B: gfx_hal::Backend> Buffer<B> {
 
     /// Create a new empty buffer to hold `size` objects of type T.
     pub fn new_empty<T: Copy>(device: &B::Device, size: usize, memory_types: &[MemoryType], properties: Properties, usage: buffer::Usage) -> Result<Self, BufferError> {
+        let (buffer, buffer_memory, size) = Buffer::<B>::empty(device, size, memory_types, properties, usage)?;
+
+        Ok(Buffer {
+            buffer: Some(buffer),
+            memory: Some(buffer_memory),
+            size: size,
+        })
+    }
+
+    pub fn empty<T: Copy>(
+        device: &B::Device,
+        size: usize,
+        memory_types: &[MemoryType],
+        properties: Properties,
+        usage: buffer::Usage) -> Result<(B::Buffer, B::Memory, usize), BufferError> {
         let stride = ::std::mem::size_of::<T>() as u64;
         let buffer_len = size as u64 * stride;
 
@@ -84,11 +99,15 @@ impl<B: gfx_hal::Backend> Buffer<B> {
         let buffer_memory = device.allocate_memory(upload_type, mem_req.size)?;
         let buffer = device.bind_buffer_memory(&buffer_memory, 0, unbound_buffer)?;
 
-        Ok(Buffer {
-            buffer: Some(buffer),
-            memory: Some(buffer_memory),
-            size: mem_req.size,
-        })
+        Ok((
+            buffer,
+            buffer_memory,
+            mem_req.size,
+        ))
+    }
+
+    pub fn acquire_mapping_writer(&mut self, device: &B::Device) -> Result<(), BufferError> {
+        device.acquire_mapping_writer::<u8>(&self.memory, 0..self.size)?
     }
 
     /// Create, allocate and populate a new uniform buffer.
