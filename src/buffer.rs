@@ -18,14 +18,14 @@ pub enum BufferError {
     NoSuitableMemoryType,
 }
 
-impl Error for BufferError { }
+impl Error for BufferError {}
 impl Display for BufferError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             BufferError::NoSuitableMemoryType => {
                 write!(f, "Could not find appropriate vertex buffer memory type.")
-            },
-            _ => write!(f, "{:?}", self)
+            }
+            _ => write!(f, "{:?}", self),
         }
     }
 }
@@ -37,14 +37,13 @@ macro_rules! wrap_buf_error {
                 BufferError::$dst(err)
             }
         }
-    }
+    };
 }
 
 wrap_buf_error!(gfx_hal::buffer::CreationError, CreationError);
 wrap_buf_error!(gfx_hal::device::BindError, BindError);
 wrap_buf_error!(gfx_hal::mapping::Error, MappingError);
 wrap_buf_error!(gfx_hal::device::AllocationError, AllocationError);
-
 
 /// Buffer data structure.
 pub struct Buffer<B: gfx_hal::Backend> {
@@ -55,14 +54,26 @@ pub struct Buffer<B: gfx_hal::Backend> {
 
 impl<B: gfx_hal::Backend> Buffer<B> {
     /// Create, allocate and populate a new buffer.
-    pub fn new<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], properties: Properties, usage: buffer::Usage) -> Result<Self, BufferError> {
+    pub fn new<T: Copy>(
+        device: &B::Device,
+        data: &[T],
+        memory_types: &[MemoryType],
+        properties: Properties,
+        usage: buffer::Usage,
+    ) -> Result<Self, BufferError> {
         let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, properties, usage)?;
         buf.fill(device, data)?;
         Ok(buf)
     }
 
     /// Create a new empty buffer to hold `size` objects of type T.
-    pub fn new_empty<T: Copy>(device: &B::Device, size: usize, memory_types: &[MemoryType], properties: Properties, usage: buffer::Usage) -> Result<Self, BufferError> {
+    pub fn new_empty<T: Copy>(
+        device: &B::Device,
+        size: usize,
+        memory_types: &[MemoryType],
+        properties: Properties,
+        usage: buffer::Usage,
+    ) -> Result<Self, BufferError> {
         let stride = ::std::mem::size_of::<T>() as u64;
         let buffer_len = size as u64 * stride;
 
@@ -90,6 +101,19 @@ impl<B: gfx_hal::Backend> Buffer<B> {
     }
 
     /// Create, allocate and populate a new uniform buffer.
+    pub fn new_uniform<T: Copy>(
+        device: &B::Device,
+        data: &[T],
+        memory_types: &[MemoryType],
+        properties: Properties,
+    ) -> Result<Self, BufferError> {
+        let mut buf = Buffer::new_empty::<T>(
+            device,
+            data.len(),
+            memory_types,
+            properties,
+            buffer::Usage::UNIFORM,
+        )?;
         buf.fill(device, data)?;
         Ok(buf)
     }
