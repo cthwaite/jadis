@@ -23,6 +23,12 @@ struct Vertex {
     colour: [f32; 4]
 }
 
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+struct UniformBlock {
+    projection: [[f32; 4]; 4]
+}
+
 
 const MESH: &[Vertex] = &[
     Vertex {
@@ -87,16 +93,16 @@ fn build_mesh(width: usize, height: usize) -> Vec<Vertex> {
     }
     return vec![
         Vertex {
-            position: [-1.0, -1.0, 0.0],
+            position: [0.0, 0.0, 0.0],
             colour: [1.0, 0.0, 0.0, 1.0],
         },
         Vertex {
-            position: [1.0, -1.0, 0.0],
-            colour: [1.0, 0.0, 0.0, 1.0],
+            position: [100.0, 0.0, 0.0],
+            colour: [1.0, 1.0, 0.0, 1.0],
         },
         Vertex {
-            position: [-1.0, 1.0, 0.0],
-            colour: [1.0, 0.0, 0.0, 1.0],
+            position: [100.0, 100.0, 0.0],
+            colour: [1.0, 0.0, 1.0, 1.0],
         },
     ]
 }
@@ -161,8 +167,20 @@ fn run_loop(config: &Config) {
         context.device.create_render_pass(&[colour_attachment], &[subpass], &[dependency]).unwrap()
     };
 
+    let set_layout = context.device.create_descriptor_set_layout(
+        &[DescriptorSetLayoutBinding {
+            binding: 0,
+            ty: DescriptorType::UniformBuffer,
+            count: 1,
+            stage_flags: ShaderStageFlags::VERTEX,
+            immutable_samplers: false,
+        }],
+        &[],
+    ).expect("Failed to create descriptor set layout!");
 
-    let pipeline_layout = context.device.create_pipeline_layout(&[], &[]).unwrap();
+    let pipeline_layout = context.device
+        .create_pipeline_layout(&[set_layout.clone()], &[])
+        .expect("Failed to create pipeline layout!");
     let pipeline = {
         let shader_entries = GraphicsShaderSet {
             vertex: vert.entry_point("main").unwrap(),
@@ -213,17 +231,54 @@ fn run_loop(config: &Config) {
             .unwrap()
     };
 
+    let mut desc_pool = context.device.create_descriptor_pool(
+        1, // maximum number of descriptor sets
+        &[DescriptorRangeDesc {
+            ty: DescriptorType::UniformBuffer,
+            count: 1 // amount of space
+        }]
+    ).expect("Unable to create descriptor pool!");
+    let desc_set = desc_pool.allocate_set(&set_layout).unwrap();
+
     use jadis::buffer::Buffer;
     let memory_types = &context.physical_device().memory_properties().memory_types;
     use jadis::gfx_backend::Backend as ConcreteBackend;
     let mesh = build_mesh(4, 4);
-    let vertex_buffer : Buffer<ConcreteBackend> = Buffer::new(
+    let mut vertex_buffer : Buffer<ConcreteBackend> = Buffer::new(
         &context.device,
         &mesh,
         &memory_types,
         Properties::CPU_VISIBLE,
         buffer::Usage::VERTEX,
     ).expect("Unable to create vertex buffer!");
+
+    let width = config.window.width as f32;
+    let height = config.window.height as f32;
+    let left = width / 2.0;
+    let right = -width / 2.0;
+    let top = -height / 2.0;
+    let bottom = height / 2.0;
+    let near = 1.0;
+    let far = -1.0;
+    let mut uniform : Buffer<ConcreteBackend> = Buffer::new_uniform(
+        &context.device,
+        &[UniformBlock {
+            projection: [
+                [2.0 / (right - left), 0.0, 0.0, -(right + left) / (right - left)],
+                [0.0,  2.0 / (top - bottom), 0.0, -(top + bottom) / (top - bottom)],
+                [0.0, 0.0, 2.0/(far-near), -(far + near) / (far - near)],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        }],
+        &memory_types,
+        Properties::CPU_VISIBLE
+    ).expect("Unable to create uniform buffer!");
+    context.device.write_descriptor_sets(vec![DescriptorSetWrite{
+        set: &desc_set,
+        binding: 0,
+        array_offset: 0,
+        descriptors: Some(Descriptor::Buffer(uniform.buffer.as_ref().unwrap(), None..None))
+    }]);
 
     let mut blackboard = Blackboard::default();
     let mut event_handler = RootEventHandler::default();
@@ -271,6 +326,22 @@ fn run_loop(config: &Config) {
         let (_, framebuffers) = framebuffer_state.get_mut();
         let swapchain_itself = swapchain.swapchain.as_mut().unwrap();
 
+        /*
+
+
+        uniform.fill(
+            &context.device,
+            &[UniformBlock {
+                projection: [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            }]
+        ).unwrap();
+        */
+
         command_pool.reset();
         let frame_index: SwapImageIndex = {
             match swapchain_itself.acquire_image(!0, FrameSync::Semaphore(&frame_semaphore)) {
@@ -299,6 +370,7 @@ fn run_loop(config: &Config) {
             command_buffer.set_scissors(0, &[viewport.rect]);
             command_buffer.bind_graphics_pipeline(&pipeline);
             command_buffer.bind_vertex_buffers(0, vec![(vertex_buffer.buffer.as_ref().unwrap(), 0)]);
+            command_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, vec![&desc_set], &[]);
 
             {
                 let mut encoder = command_buffer.begin_render_pass_inline(
@@ -339,7 +411,8 @@ fn run_loop(config: &Config) {
     device.destroy_graphics_pipeline(pipeline);
     device.destroy_pipeline_layout(pipeline_layout);
 
-
+    vertex_buffer.destroy(&context.device);
+    uniform.destroy(&context.device);
     device.destroy_render_pass(render_pass);
 
     device.destroy_command_pool(command_pool.into_raw());
