@@ -1,6 +1,5 @@
 use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 
-
 /// The InputHandler trait is used to react to, process and optionally modify or
 /// cancel further propagation of incoming events.
 pub trait InputHandler {
@@ -20,9 +19,8 @@ pub trait InputHandler {
 /// cache for propagation to `InputHandler`s via the `sync` method.
 #[derive(Debug, Default)]
 pub struct RootEventHandler {
-    events: Vec<Event>
+    events: Vec<Event>,
 }
-
 
 impl RootEventHandler {
     /// Pass each Event in the cache to an InputHandler, saving the return value
@@ -31,9 +29,7 @@ impl RootEventHandler {
         let events = std::mem::replace(&mut self.events, vec![]);
         self.events = events
             .into_iter()
-            .filter_map(|event| {
-                receiver.handle_event(event)
-            })
+            .filter_map(|event| receiver.handle_event(event))
             .collect::<Vec<_>>();
     }
 
@@ -47,7 +43,6 @@ impl RootEventHandler {
         self.events.push(event);
     }
 }
-
 
 /// Simple blackboard for data used by the first-cut main loop.
 #[derive(Clone, Debug)]
@@ -73,7 +68,6 @@ impl Blackboard {
     }
 }
 
-
 impl InputHandler for Blackboard {
     /// Check for `Esc`, window resize, and window close events.
     fn handle_event(&mut self, event: Event) -> Option<Event> {
@@ -81,19 +75,19 @@ impl InputHandler for Blackboard {
             match event {
                 WindowEvent::CloseRequested => self.should_quit = true,
                 WindowEvent::KeyboardInput {
-                    input: KeyboardInput {
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
-                        ..
-                    },
+                    input:
+                        KeyboardInput {
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        },
                     ..
                 } => self.should_quit = true,
                 WindowEvent::Resized(_) => {
                     self.should_rebuild_swapchain = true;
-                },
+                }
                 _ => (),
             }
         }
         None
     }
 }
-
