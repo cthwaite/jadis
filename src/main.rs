@@ -199,8 +199,8 @@ fn run_loop(window: &mut Window) {
         &context.device,
         &mesh,
         &memory_types,
+        Properties::CPU_VISIBLE,
         buffer::Usage::VERTEX,
-        Properties::CPU_VISIBLE
     ).expect("Unable to create vertex buffer!");
 
     let mut blackboard = Blackboard::default();

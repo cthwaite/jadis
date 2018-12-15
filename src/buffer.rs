@@ -58,7 +58,7 @@ pub struct Buffer<B: gfx_hal::Backend> {
 impl<B: gfx_hal::Backend> Buffer<B> {
     /// Create, allocate and populate a new buffer.
     pub fn new<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], properties: Properties, usage: buffer::Usage) -> Result<Self, BufferError> {
-        let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, usage, properties)?;
+        let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, properties, usage)?;
         buf.fill(device, data);
         Ok(buf)
     }
@@ -93,7 +93,7 @@ impl<B: gfx_hal::Backend> Buffer<B> {
 
     /// Create, allocate and populate a new uniform buffer.
     pub fn new_uniform<T: Copy>(device: &B::Device, data: &[T], memory_types: &[MemoryType], properties: Properties) -> Result<Self, BufferError> {
-        let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, buffer::Usage::UNIFORM, properties)?;
+        let mut buf = Buffer::new_empty::<T>(device, data.len(), memory_types, properties, buffer::Usage::UNIFORM)?;
         buf.fill(device, data);
         Ok(buf)
     }
