@@ -254,12 +254,12 @@ fn run_loop(config: &Config) {
 
     let width = config.window.width as f32;
     let height = config.window.height as f32;
-    let left = width / 2.0;
-    let right = -width / 2.0;
+    let left = -width / 2.0;
+    let right = width / 2.0;
     let top = -height / 2.0;
     let bottom = height / 2.0;
-    let near = 1.0;
-    let far = -1.0;
+    let near = 0.0;
+    let far = 1.0;
     let mut uniform : Buffer<ConcreteBackend> = Buffer::new_uniform(
         &context.device,
         &[UniformBlock {
@@ -267,7 +267,7 @@ fn run_loop(config: &Config) {
                 [2.0 / (right - left), 0.0, 0.0, -(right + left) / (right - left)],
                 [0.0,  2.0 / (top - bottom), 0.0, -(top + bottom) / (top - bottom)],
                 [0.0, 0.0, 2.0/(far-near), -(far + near) / (far - near)],
-                [0.0, 0.0, 0.0, 1.0],
+                [-1.0, 1.0, 0.0, 1.0],
             ]
         }],
         &memory_types,
