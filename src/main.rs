@@ -81,41 +81,118 @@ fn get_matrix_for_grid(width: usize, height: usize) -> [[f32; 4]; 4] {
     ]
 }
 
-fn run_loop(config: &Config) {
+struct MeshConsoleRenderer<B: gfx_hal::Backend> {
+    pub render_pass: B::RenderPass,
+    vert: ShaderHandle<B>,
+    frag: ShaderHandle<B>,
+    pipeline: B::GraphicsPipeline,
+    pipeline_layout: B::PipelineLayout,
+    mesh: Vec<Vertex>,
+    vertex_buffer: jadis::buffer::Buffer<B>,
+    projection: jadis::buffer::Buffer<B>,
+    desc_set: B::DescriptorSet,
+}
 
-    #[cfg(not(feature = "gl"))]
-    let (mut window, instance, mut context) = {
-        let instance = InstanceWrapper::new();
-        let mut window = Window::new(&config);
-        let mut context = instance.create_context(&window);
-        (window, instance, context)
-    };
 
-    #[cfg(feature = "gl")]
-    let (mut window, instance, mut context) = {
-        let instance = InstanceWrapper::new();
-        let mut window = Window::new(&config);
-        let mut context = instance.create_context(window.window.take().unwrap());
-        (window, instance, context)
-    };
+impl<B: gfx_hal::Backend> MeshConsoleRenderer<B> {
+    fn new(context: &Context<B>) -> Self {
+        use jadis::buffer::Buffer;
+        let (vert, frag) = MeshConsoleRenderer::load_shaders(context);
+        let render_pass = MeshConsoleRenderer::build_render_pass(context);
+        let set_layout = context.device.create_descriptor_set_layout(
+            &[DescriptorSetLayoutBinding {
+                binding: 0,
+                ty: DescriptorType::UniformBuffer,
+                count: 1,
+                stage_flags: ShaderStageFlags::VERTEX,
+                immutable_samplers: false,
+            }],
+            &[],
+        ).expect("Failed to create descriptor set layout!");
 
-    #[cfg(os = "windows")]
-    let vert_path = "assets\\mesh.vert";
-    #[cfg(not(os = "windows"))]
-    let vert_path = "assets/mesh.vert";
-    let source = ShaderSource::from_glsl_path(vert_path).expect("Couldn't find fragment shader");
-    let mut vert = ShaderHandle::new(&context.device, source).expect("failed to load fragment shader");
-    info!("loaded vertex shader");
+        let mut desc_pool = context.device.create_descriptor_pool(
+            1, // maximum number of descriptor sets
+            &[DescriptorRangeDesc {
+                ty: DescriptorType::UniformBuffer,
+                count: 1 // amount of space
+            }]
+        ).expect("Unable to create descriptor pool!");
+        let desc_set = desc_pool.allocate_set(&set_layout).unwrap();
+        let pipeline_layout = context.device
+            .create_pipeline_layout(&[set_layout], &[])
+            .expect("Failed to create pipeline layout!");
 
-    #[cfg(os = "windows")]
-    let frag_path = "assets\\mesh.frag";
-    #[cfg(not(os = "windows"))]
-    let frag_path = "assets/mesh.frag";
-    let source = ShaderSource::from_glsl_path(frag_path).expect("Couldn't find vertex shader");
-    let mut frag = ShaderHandle::new(&context.device, source).expect("failed to load vertex shader");
-    info!("loaded fragment shader");
+        
+        let pipeline = MeshConsoleRenderer::build_pipeline(context, &vert, &frag, &render_pass, &pipeline_layout);
+        let mesh = build_mesh(80, 50);
+        let memory_types = &context.physical_device().memory_properties().memory_types;
+        let vertex_buffer = Buffer::new(
+            &context.device,
+            &mesh,
+            &memory_types,
+            Properties::CPU_VISIBLE,
+            buffer::Usage::VERTEX,
+        ).expect("Unable to create vertex buffer!");
+        let projection = Buffer::new_uniform(
+            &context.device,
+            &[UniformBlock {
+                projection: get_matrix_for_grid(80, 50)
+            }],
+            &memory_types,
+            Properties::CPU_VISIBLE
+        ).expect("Unable to create uniform buffer!");
+        context.device.write_descriptor_sets(vec![DescriptorSetWrite{
+            set: &desc_set,
+            binding: 0,
+            array_offset: 0,
+            descriptors: Some(Descriptor::Buffer(projection.buffer.as_ref().unwrap(), None..None))
+        }]);
+        MeshConsoleRenderer {
+            vert,
+            frag,
+            render_pass,
+            pipeline,
+            pipeline_layout,
+            mesh,
+            vertex_buffer,
+            projection,
+            desc_set,            
+        }
+    }
 
-    let render_pass = {
+    pub fn destroy(mut self, context: &Context<B>) {
+        context.device.destroy_graphics_pipeline(self.pipeline);
+        context.device.destroy_pipeline_layout(self.pipeline_layout);
+
+        self.vertex_buffer.destroy(&context.device);
+        self.projection.destroy(&context.device);
+        context.device.destroy_render_pass(self.render_pass);
+
+        self.vert.destroy(&context.device);
+        self.frag.destroy(&context.device);
+    }
+
+    pub fn load_shaders(context: &Context<B>) -> (ShaderHandle<B>, ShaderHandle<B>) {
+        #[cfg(os = "windows")]
+        let vert_path = "assets\\mesh.vert";
+        #[cfg(not(os = "windows"))]
+        let vert_path = "assets/mesh.vert";
+        let source = ShaderSource::from_glsl_path(vert_path).expect("Couldn't find fragment shader");
+        let vert = ShaderHandle::new(&context.device, source).expect("failed to load fragment shader");
+        info!("loaded vertex shader");
+
+        #[cfg(os = "windows")]
+        let frag_path = "assets\\mesh.frag";
+        #[cfg(not(os = "windows"))]
+        let frag_path = "assets/mesh.frag";
+        let source = ShaderSource::from_glsl_path(frag_path).expect("Couldn't find vertex shader");
+        let frag = ShaderHandle::new(&context.device, source).expect("failed to load vertex shader");
+        info!("loaded fragment shader");
+
+        (vert, frag)
+    }
+
+    pub fn build_render_pass(context: &Context<B>) -> B::RenderPass {
         let colour_attachment = Attachment {
             format: Some(context.surface_colour_format),
             samples: 1,
@@ -139,23 +216,9 @@ fn run_loop(config: &Config) {
         };
 
         context.device.create_render_pass(&[colour_attachment], &[subpass], &[dependency]).unwrap()
-    };
+    }
 
-    let set_layout = context.device.create_descriptor_set_layout(
-        &[DescriptorSetLayoutBinding {
-            binding: 0,
-            ty: DescriptorType::UniformBuffer,
-            count: 1,
-            stage_flags: ShaderStageFlags::VERTEX,
-            immutable_samplers: false,
-        }],
-        &[],
-    ).expect("Failed to create descriptor set layout!");
-
-    let pipeline_layout = context.device
-        .create_pipeline_layout(&[set_layout.clone()], &[])
-        .expect("Failed to create pipeline layout!");
-    let pipeline = {
+    pub fn build_pipeline(context: &Context<B>, vert: &ShaderHandle<B>, frag: &ShaderHandle<B>, render_pass: &B::RenderPass, pipeline_layout: &B::PipelineLayout) -> B::GraphicsPipeline {
         let shader_entries = GraphicsShaderSet {
             vertex: vert.entry_point("main").unwrap(),
             hull: None,
@@ -166,7 +229,7 @@ fn run_loop(config: &Config) {
 
         let subpass = Subpass {
             index: 0,
-            main_pass: &render_pass
+            main_pass: render_pass
         };
 
         let mut pipeline_desc = GraphicsPipelineDesc::new(shader_entries,
@@ -203,44 +266,54 @@ fn run_loop(config: &Config) {
         });
         context.device.create_graphics_pipeline(&pipeline_desc, None)
             .unwrap()
+    }
+
+    pub fn render<C, S>(&self, mut command_buffer: CommandBuffer<B, C, S>, framebuffers: &[B::Framebuffer], frame_index: u32, viewport: Viewport) -> gfx_hal::command::Submit<B, C, S, gfx_hal::command::Primary>
+        where C: gfx_hal::queue::Supports<gfx_hal::queue::capability::Graphics>,
+              S: gfx_hal::command::Shot {
+        command_buffer.set_viewports(0, &[viewport.clone()]);
+        command_buffer.set_scissors(0, &[viewport.rect]);
+        command_buffer.bind_graphics_pipeline(&self.pipeline);
+        command_buffer.bind_vertex_buffers(0, vec![(self.vertex_buffer.buffer.as_ref().unwrap(), 0)]);
+        command_buffer.bind_graphics_descriptor_sets(&self.pipeline_layout, 0, vec![&self.desc_set], &[]);
+
+        {
+            let mut encoder = command_buffer.begin_render_pass_inline(
+                &self.render_pass,
+                &framebuffers[frame_index as usize],
+                viewport.rect,
+                &[ClearValue::Color(ClearColor::Float([0.0, 0.0, 0.0, 1.0]))],
+            );
+
+            let num_vertices = self.mesh.len() as u32;
+            encoder.draw(0..num_vertices, 0..1);
+        }
+
+        command_buffer.finish()
+    }
+} 
+
+fn run_loop(config: &Config) {
+
+    #[cfg(not(feature = "gl"))]
+    let (mut window, instance, mut context) = {
+        let instance = InstanceWrapper::new();
+        let mut window = Window::new(&config);
+        let mut context = instance.create_context(&window);
+        (window, instance, context)
     };
 
-    let mut desc_pool = context.device.create_descriptor_pool(
-        1, // maximum number of descriptor sets
-        &[DescriptorRangeDesc {
-            ty: DescriptorType::UniformBuffer,
-            count: 1 // amount of space
-        }]
-    ).expect("Unable to create descriptor pool!");
-    let desc_set = desc_pool.allocate_set(&set_layout).unwrap();
+    #[cfg(feature = "gl")]
+    let (mut window, instance, mut context) = {
+        let instance = InstanceWrapper::new();
+        let mut window = Window::new(&config);
+        let mut context = instance.create_context(window.window.take().unwrap());
+        (window, instance, context)
+    };
 
-    use jadis::buffer::Buffer;
-    let memory_types = &context.physical_device().memory_properties().memory_types;
     use jadis::gfx_backend::Backend as ConcreteBackend;
 
-    let mesh = build_mesh(80, 50);
-    let mut vertex_buffer : Buffer<ConcreteBackend> = Buffer::new(
-        &context.device,
-        &mesh,
-        &memory_types,
-        Properties::CPU_VISIBLE,
-        buffer::Usage::VERTEX,
-    ).expect("Unable to create vertex buffer!");
-
-    let mut uniform : Buffer<ConcreteBackend> = Buffer::new_uniform(
-        &context.device,
-        &[UniformBlock {
-            projection: get_matrix_for_grid(80, 50)
-        }],
-        &memory_types,
-        Properties::CPU_VISIBLE
-    ).expect("Unable to create uniform buffer!");
-    context.device.write_descriptor_sets(vec![DescriptorSetWrite{
-        set: &desc_set,
-        binding: 0,
-        array_offset: 0,
-        descriptors: Some(Descriptor::Buffer(uniform.buffer.as_ref().unwrap(), None..None))
-    }]);
+    let mut renderer = MeshConsoleRenderer::<ConcreteBackend>::new(&context);
 
     let mut blackboard = Blackboard::default();
     let mut event_handler = RootEventHandler::default();
@@ -256,7 +329,7 @@ fn run_loop(config: &Config) {
 
     info!("starting main loop");
     let mut swapchain = SwapchainState::new(&mut context);
-    let mut framebuffer_state = FramebufferState::new(&context, &render_pass, &mut swapchain);
+    let mut framebuffer_state = FramebufferState::new(&context, &renderer.render_pass, &mut swapchain);
 
     'main: loop {
         blackboard.reset();
@@ -282,27 +355,11 @@ fn run_loop(config: &Config) {
             info!("rebuilding swapchain ({} | {})", blackboard.should_rebuild_swapchain, framebuffer_state.is_none());
             swapchain.rebuild(&mut context);
 
-            framebuffer_state.rebuild_from_swapchain(&context, &render_pass, &mut swapchain);
+            framebuffer_state.rebuild_from_swapchain(&context, &renderer.render_pass, &mut swapchain);
         }
 
         let (_, framebuffers) = framebuffer_state.get_mut();
         let swapchain_itself = swapchain.swapchain.as_mut().unwrap();
-
-        /*
-
-
-        uniform.fill(
-            &context.device,
-            &[UniformBlock {
-                projection: [
-                    [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ]
-            }]
-        ).unwrap();
-        */
 
         command_pool.reset();
         let frame_index: SwapImageIndex = {
@@ -316,39 +373,19 @@ fn run_loop(config: &Config) {
             }
         };
 
-        let finished_command_buffer =  {
-            let mut command_buffer = command_pool.acquire_command_buffer(false);
-
-            let viewport = Viewport {
+        let finished_command_buffer = renderer.render(
+            command_pool.acquire_command_buffer(false),
+            &framebuffers,
+            frame_index,
+            Viewport {
                 rect: Rect {
                     x: 0, y: 0,
                     w: swapchain.extent.width as i16,
                     h: swapchain.extent.height as i16,
                 },
                 depth: 0.0..1.0,
-            };
-
-            command_buffer.set_viewports(0, &[viewport.clone()]);
-            command_buffer.set_scissors(0, &[viewport.rect]);
-            command_buffer.bind_graphics_pipeline(&pipeline);
-            command_buffer.bind_vertex_buffers(0, vec![(vertex_buffer.buffer.as_ref().unwrap(), 0)]);
-            command_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, vec![&desc_set], &[]);
-
-            {
-                let mut encoder = command_buffer.begin_render_pass_inline(
-                    &render_pass,
-                    &framebuffers[frame_index as usize],
-                    viewport.rect,
-                    clear_colours,
-                );
-
-                let num_vertices = mesh.len() as u32;
-                encoder.draw(0..num_vertices, 0..1);
             }
-
-            command_buffer.finish()
-        };
-
+        );
         let submission = Submission::new()
                             .wait_on(&[(&frame_semaphore, PipelineStage::BOTTOM_OF_PIPE)])
                             .signal(&[&present_semaphore])
@@ -370,19 +407,11 @@ fn run_loop(config: &Config) {
 
     let device = &context.device;
 
-    device.destroy_graphics_pipeline(pipeline);
-    device.destroy_pipeline_layout(pipeline_layout);
-
-    vertex_buffer.destroy(&context.device);
-    uniform.destroy(&context.device);
-    device.destroy_render_pass(render_pass);
+    renderer.destroy(&context);
 
     device.destroy_command_pool(command_pool.into_raw());
     device.destroy_semaphore(frame_semaphore);
     device.destroy_semaphore(present_semaphore);
-
-    vert.destroy(device);
-    frag.destroy(device);
 }
 
 
