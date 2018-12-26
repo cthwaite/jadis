@@ -388,7 +388,7 @@ fn run_loop(config: &Config) {
 
 fn load_config() -> Config {
     let config_path = std::env::var(JADIS_CONFIG_ENV)
-                            .unwrap_or(JADIS_CONFIG_DEFAULT_PATH.to_owned());
+                            .unwrap_or_else(|_| JADIS_CONFIG_DEFAULT_PATH.to_owned());
     let config = Config::load_from_file(&config_path).unwrap_or_else(|err|{
         eprintln!("Unable to load config from {}, detail:", config_path);
         eprintln!("{:?}", err);
