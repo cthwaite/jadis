@@ -64,6 +64,23 @@ fn build_mesh(width: usize, height: usize) -> Vec<Vertex> {
     mesh
 }
 
+fn get_matrix_for_grid(width: usize, height: usize) -> [[f32; 4]; 4] {
+    let width = width as f32;
+    let height = height as f32;
+    let left = -width / 2.0;
+    let right = width / 2.0;
+    let top = height / 2.0; 
+    let bottom = -height / 2.0;
+    let near = 0.0;
+    let far = 1.0;
+    [
+        [2.0 / (right - left), 0.0, 0.0, -(right + left) / (right - left)],
+        [0.0,  2.0 / (top - bottom), 0.0, -(top + bottom) / (top - bottom)],
+        [0.0, 0.0, 2.0/(far-near), -(far + near) / (far - near)],
+        [-1.0, -1.0, 0.0, 1.0],
+    ]
+}
+
 fn run_loop(config: &Config) {
 
     #[cfg(not(feature = "gl"))]
@@ -200,6 +217,7 @@ fn run_loop(config: &Config) {
     use jadis::buffer::Buffer;
     let memory_types = &context.physical_device().memory_properties().memory_types;
     use jadis::gfx_backend::Backend as ConcreteBackend;
+
     let mesh = build_mesh(80, 50);
     let mut vertex_buffer : Buffer<ConcreteBackend> = Buffer::new(
         &context.device,
@@ -209,23 +227,10 @@ fn run_loop(config: &Config) {
         buffer::Usage::VERTEX,
     ).expect("Unable to create vertex buffer!");
 
-    let width = 80.0; //config.window.width as f32;
-    let height = 50.0; //config.window.height as f32;
-    let left = -width / 2.0;
-    let right = width / 2.0;
-    let top = height / 2.0; 
-    let bottom = -height / 2.0;
-    let near = 0.0;
-    let far = 1.0;
     let mut uniform : Buffer<ConcreteBackend> = Buffer::new_uniform(
         &context.device,
         &[UniformBlock {
-            projection: [
-                [2.0 / (right - left), 0.0, 0.0, -(right + left) / (right - left)],
-                [0.0,  2.0 / (top - bottom), 0.0, -(top + bottom) / (top - bottom)],
-                [0.0, 0.0, 2.0/(far-near), -(far + near) / (far - near)],
-                [-1.0, -1.0, 0.0, 1.0],
-            ]
+            projection: get_matrix_for_grid(80, 50)
         }],
         &memory_types,
         Properties::CPU_VISIBLE
