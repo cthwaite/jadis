@@ -12,6 +12,7 @@ type ShaderModule<B> = <B as gfx_hal::Backend>::ShaderModule;
 pub enum ShaderHandleError {
     LoadFail(std::io::Error),
     ShaderFail(gfx_hal::device::ShaderError),
+    EmptySource,
     Other(String),
 }
 impl From<String> for ShaderHandleError {
@@ -55,6 +56,7 @@ pub enum ShaderSource {
     GLSLRaw(ShaderType, String),
     SpirVFile(String),
     SpirVRaw(Vec<u8>),
+    Empty
 }
 
 impl ShaderSource {
@@ -88,6 +90,15 @@ pub struct ShaderHandle<B: gfx_hal::Backend> {
     module: Option<ShaderModule<B>>,
 }
 
+impl<B: gfx_hal::Backend> Default for ShaderHandle<B> {
+    fn default() -> Self {
+        ShaderHandle {
+            source: ShaderSource::Empty,
+            module: None,
+        }
+    }
+}
+
 impl<B: gfx_hal::Backend> ShaderHandle<B> {
     /// Create a new shader handle using the passed device.
     pub fn new(device: &B::Device, source: ShaderSource) -> Result<Self, ShaderHandleError> {
@@ -102,23 +113,26 @@ impl<B: gfx_hal::Backend> ShaderHandle<B> {
         device: &B::Device,
         source: &ShaderSource,
     ) -> Result<ShaderModule<B>, ShaderHandleError> {
-        let result = match source {
-            ShaderSource::GLSLFile(shader_type, path) => {
-                let source = fs::read_to_string(path)?;
-                let compiled_spirv = compile_to_spirv(&source, shader_type)?;
-                device.create_shader_module(&compiled_spirv)
+        let result = unsafe {
+            match source {
+                ShaderSource::GLSLFile(shader_type, path) => {
+                    let source = fs::read_to_string(path)?;
+                    let compiled_spirv = compile_to_spirv(&source, shader_type)?;
+                    device.create_shader_module(&compiled_spirv)
+                }
+                ShaderSource::GLSLRaw(shader_type, source) => {
+                    let compiled_spirv = compile_to_spirv(&source, shader_type)?;
+                    device.create_shader_module(&compiled_spirv)
+                }
+                ShaderSource::SpirVFile(path) => {
+                    let mut file = File::open(path)?;
+                    let mut buf = Vec::new();
+                    let _read_size = file.read_to_end(&mut buf)?;
+                    device.create_shader_module(&buf)
+                }
+                ShaderSource::SpirVRaw(bytes) => device.create_shader_module(&bytes),
+                ShaderSource::Empty => return Err(ShaderHandleError::EmptySource),
             }
-            ShaderSource::GLSLRaw(shader_type, source) => {
-                let compiled_spirv = compile_to_spirv(&source, shader_type)?;
-                device.create_shader_module(&compiled_spirv)
-            }
-            ShaderSource::SpirVFile(path) => {
-                let mut file = File::open(path)?;
-                let mut buf = Vec::new();
-                let read_size = file.read_to_end(&mut buf)?;
-                device.create_shader_module(&buf)
-            }
-            ShaderSource::SpirVRaw(bytes) => device.create_shader_module(&bytes),
         };
         result.map_err(|err| err.into())
     }
@@ -133,7 +147,7 @@ impl<B: gfx_hal::Backend> ShaderHandle<B> {
     pub fn destroy(&mut self, device: &B::Device) {
         let module = std::mem::replace(&mut self.module, None);
         if let Some(module) = module {
-            device.destroy_shader_module(module);
+            unsafe { device.destroy_shader_module(module) };
         }
     }
 

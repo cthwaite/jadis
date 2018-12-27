@@ -7,6 +7,12 @@ pub extern crate gfx_backend_metal as gfx_backend;
 #[cfg(feature = "vulkan")]
 pub extern crate gfx_backend_vulkan as gfx_backend;
 
+
+#[cfg(not(feature = "gl"))]
+use gfx_backend::winit;
+#[cfg(feature = "gl")]
+use gfx_backend::glutin;
+
 pub mod buffer;
 pub mod config;
 pub mod context;

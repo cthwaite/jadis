@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use jadis::context::{Context, InstanceWrapper};
 use jadis::config::Config;
 use jadis::input::{Blackboard, RootEventHandler};
@@ -95,7 +93,7 @@ struct MeshConsoleRenderer<B: gfx_hal::Backend> {
 
 
 impl<B: gfx_hal::Backend> MeshConsoleRenderer<B> {
-    fn new(context: &Context<B>) -> Self {
+    pub unsafe fn new(context: &Context<B>) -> Self {
         use jadis::buffer::Buffer;
         let (vert, frag) = MeshConsoleRenderer::load_shaders(context);
         let render_pass = MeshConsoleRenderer::build_render_pass(context);
@@ -160,7 +158,7 @@ impl<B: gfx_hal::Backend> MeshConsoleRenderer<B> {
         }
     }
 
-    pub fn destroy(mut self, context: &Context<B>) {
+    pub unsafe fn destroy(mut self, context: &Context<B>) {
         context.device.destroy_graphics_pipeline(self.pipeline);
         context.device.destroy_pipeline_layout(self.pipeline_layout);
 
@@ -178,7 +176,7 @@ impl<B: gfx_hal::Backend> MeshConsoleRenderer<B> {
         #[cfg(not(os = "windows"))]
         let vert_path = "assets/mesh.vert";
         let source = ShaderSource::from_glsl_path(vert_path).expect("Couldn't find fragment shader");
-        let vert = ShaderHandle::new(&context.device, source).expect("failed to load fragment shader");
+        let vert = ShaderHandle::new(&context.device, source).expect("Failed to load fragment shader");
         info!("loaded vertex shader");
 
         #[cfg(os = "windows")]
@@ -186,7 +184,7 @@ impl<B: gfx_hal::Backend> MeshConsoleRenderer<B> {
         #[cfg(not(os = "windows"))]
         let frag_path = "assets/mesh.frag";
         let source = ShaderSource::from_glsl_path(frag_path).expect("Couldn't find vertex shader");
-        let frag = ShaderHandle::new(&context.device, source).expect("failed to load vertex shader");
+        let frag = ShaderHandle::new(&context.device, source).expect("Failed to load vertex shader");
         info!("loaded fragment shader");
 
         (vert, frag)
@@ -215,7 +213,11 @@ impl<B: gfx_hal::Backend> MeshConsoleRenderer<B> {
             accesses: Access::empty()..(Access::COLOR_ATTACHMENT_READ | Access::COLOR_ATTACHMENT_WRITE),
         };
 
-        context.device.create_render_pass(&[colour_attachment], &[subpass], &[dependency]).unwrap()
+        unsafe {
+            context.device
+                .create_render_pass(&[colour_attachment], &[subpass], &[dependency])
+                .unwrap()
+        }
     }
 
     pub fn build_pipeline(context: &Context<B>, vert: &ShaderHandle<B>, frag: &ShaderHandle<B>, render_pass: &B::RenderPass, pipeline_layout: &B::PipelineLayout) -> B::GraphicsPipeline {
@@ -264,11 +266,13 @@ impl<B: gfx_hal::Backend> MeshConsoleRenderer<B> {
                 offset: 12
             }
         });
-        context.device.create_graphics_pipeline(&pipeline_desc, None)
-            .unwrap()
+        unsafe {
+            context.device.create_graphics_pipeline(&pipeline_desc, None)
+                .unwrap()
+        }
     }
 
-    pub fn render<C, S>(&self, mut command_buffer: CommandBuffer<B, C, S>, framebuffers: &[B::Framebuffer], frame_index: u32, viewport: Viewport) -> gfx_hal::command::Submit<B, C, S, gfx_hal::command::Primary>
+    pub unsafe fn render<C, S>(&self,  command_buffer: &mut CommandBuffer<B, C, S>, framebuffers: &[B::Framebuffer], frame_index: u32, viewport: Viewport)
         where C: gfx_hal::queue::Supports<gfx_hal::queue::capability::Graphics>,
               S: gfx_hal::command::Shot {
         command_buffer.set_viewports(0, &[viewport.clone()]);
@@ -289,7 +293,7 @@ impl<B: gfx_hal::Backend> MeshConsoleRenderer<B> {
             encoder.draw(0..num_vertices, 0..1);
         }
 
-        command_buffer.finish()
+        command_buffer.finish();
     }
 } 
 
@@ -307,19 +311,21 @@ fn run_loop(config: &Config) {
     let (mut window, instance, mut context) = {
         let instance = InstanceWrapper::new();
         let mut window = Window::new(&config);
-        let mut context = instance.create_context(window.window.take().unwrap());
+        let context = instance.create_context(window.window.take().unwrap());
         (window, instance, context)
     };
 
     use jadis::gfx_backend::Backend as ConcreteBackend;
 
-    let mut renderer = MeshConsoleRenderer::<ConcreteBackend>::new(&context);
+    let mut renderer = unsafe {
+        MeshConsoleRenderer::<ConcreteBackend>::new(&context)
+    };
 
     let mut blackboard = Blackboard::default();
     let mut event_handler = RootEventHandler::default();
 
 
-    let mut command_pool = context.create_command_pool(16);
+    let mut command_pool = context.create_command_pool();
 
     let clear_colours = &[ClearValue::Color(ClearColor::Float([0.0, 0.0, 0.0, 1.0]))];
 
@@ -339,7 +345,7 @@ fn run_loop(config: &Config) {
 
         if (blackboard.should_quit || blackboard.should_rebuild_swapchain) && framebuffer_state.is_some() {
             context.device.wait_idle().unwrap();
-            command_pool.reset();
+            unsafe { command_pool.reset() };
 
             framebuffer_state.destroy(&context.device);
 
@@ -361,8 +367,8 @@ fn run_loop(config: &Config) {
         let (_, framebuffers) = framebuffer_state.get_mut();
         let swapchain_itself = swapchain.swapchain.as_mut().unwrap();
 
-        command_pool.reset();
-        let frame_index: SwapImageIndex = {
+        let frame_index: SwapImageIndex = unsafe {
+            command_pool.reset();
             match swapchain_itself.acquire_image(!0, FrameSync::Semaphore(&frame_semaphore)) {
                 Ok(i) => i,
                 Err(_) => {
@@ -373,31 +379,38 @@ fn run_loop(config: &Config) {
             }
         };
 
-        let finished_command_buffer = renderer.render(
-            command_pool.acquire_command_buffer(false),
-            &framebuffers,
-            frame_index,
-            Viewport {
-                rect: Rect {
-                    x: 0, y: 0,
-                    w: swapchain.extent.width as i16,
-                    h: swapchain.extent.height as i16,
-                },
-                depth: 0.0..1.0,
-            }
-        );
-        let submission = Submission::new()
-                            .wait_on(&[(&frame_semaphore, PipelineStage::BOTTOM_OF_PIPE)])
-                            .signal(&[&present_semaphore])
-                            .submit(vec![finished_command_buffer]);
+        let mut cmd_buffer = command_pool.acquire_command_buffer::<gfx_hal::command::OneShot>();
+        unsafe {
+            renderer.render(
+                &mut cmd_buffer,
+                &framebuffers,
+                frame_index,
+                Viewport {
+                    rect: Rect {
+                        x: 0, y: 0,
+                        w: swapchain.extent.width as i16,
+                        h: swapchain.extent.height as i16,
+                    },
+                    depth: 0.0..1.0,
+                }
+            );
+        }
 
-        context.queue_group.queues[0].submit(submission, None);
+        use std::iter;
+        let submission = Submission {
+            wait_semaphores: Some((&frame_semaphore, PipelineStage::BOTTOM_OF_PIPE)),
+            signal_semaphores: iter::once(&present_semaphore),
+            command_buffers: Some(&cmd_buffer),
+        };
 
-        let result = swapchain_itself.present(
-            &mut context.queue_group.queues[0],
-            frame_index,
-            vec![&present_semaphore],
-        );
+        let result = unsafe {
+            context.queue_group.queues[0].submit(submission, None);
+            swapchain_itself.present(
+                &mut context.queue_group.queues[0],
+                frame_index,
+                vec![&present_semaphore],
+            )
+        };
 
         if result.is_err() {
             warn!("Rebuilding the swapchain because present errored");
@@ -407,11 +420,13 @@ fn run_loop(config: &Config) {
 
     let device = &context.device;
 
-    renderer.destroy(&context);
+    unsafe {
+        renderer.destroy(&context);
 
-    device.destroy_command_pool(command_pool.into_raw());
-    device.destroy_semaphore(frame_semaphore);
-    device.destroy_semaphore(present_semaphore);
+        device.destroy_command_pool(command_pool.into_raw());
+        device.destroy_semaphore(frame_semaphore);
+        device.destroy_semaphore(present_semaphore);
+    }
 }
 
 

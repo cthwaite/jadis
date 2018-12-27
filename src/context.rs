@@ -101,7 +101,7 @@ impl<B: gfx_hal::Backend> Context<B> {
             (device, physical_device, queue_group)
         };
 
-        let (surface_caps, formats, _) = surface.compatibility(physical_device);
+        let (surface_caps, formats, _present_mode, _composite_alpha) = surface.compatibility(physical_device);
         let surface_colour_format = Context::<B>::pick_surface_colour_format(formats);
 
         Context {
@@ -126,6 +126,7 @@ impl<B: gfx_hal::Backend> Context<B> {
         SurfaceCapabilities,
         Option<Vec<Format>>,
         Vec<gfx_hal::PresentMode>,
+        Vec<gfx_hal::CompositeAlpha>,
     ) {
         let actual_adapter = &self.available_adapters[self.adapter];
         let physical_device = &actual_adapter.physical_device;
@@ -133,16 +134,16 @@ impl<B: gfx_hal::Backend> Context<B> {
     }
 
     pub fn create_command_pool(
-        &self,
-        max_buffers: usize,
+        &self
     ) -> gfx_hal::CommandPool<B, gfx_hal::queue::capability::Graphics> {
-        self.device
-            .create_command_pool_typed(
-                &self.queue_group,
-                CommandPoolCreateFlags::empty(),
-                max_buffers,
-            )
-            .unwrap()
+        unsafe {
+            self.device
+                .create_command_pool_typed(
+                    &self.queue_group,
+                    CommandPoolCreateFlags::empty()
+                )
+                .unwrap()
+        }
     }
 
     pub fn create_swapchain(
@@ -150,9 +151,11 @@ impl<B: gfx_hal::Backend> Context<B> {
         config: SwapchainConfig,
         old_swapchain: Option<B::Swapchain>,
     ) -> (B::Swapchain, gfx_hal::Backbuffer<B>) {
-        self.device
-            .create_swapchain(&mut self.surface, config, old_swapchain)
-            .expect("Failed to create swapchain!")
+        unsafe {
+            self.device
+                .create_swapchain(&mut self.surface, config, old_swapchain)
+                .expect("Failed to create swapchain!")
+        }
     }
 
     pub fn map_to_image_views(
@@ -175,8 +178,10 @@ impl<B: gfx_hal::Backend> Context<B> {
         swizzle: Swizzle,
         range: SubresourceRange,
     ) -> Result<B::ImageView, ViewError> {
-        self.device
-            .create_image_view(image, view_kind, self.surface_colour_format, swizzle, range)
+        unsafe {
+            self.device
+                .create_image_view(image, view_kind, self.surface_colour_format, swizzle, range)
+        }
     }
 
     pub fn image_views_to_fbos(
@@ -187,7 +192,7 @@ impl<B: gfx_hal::Backend> Context<B> {
     ) -> Result<Vec<B::Framebuffer>, gfx_hal::device::OutOfMemory> {
         image_views
             .iter()
-            .map(|image_view| {
+            .map(|image_view| unsafe {
                 self.device
                     .create_framebuffer(&render_pass, vec![image_view], extent)
             })

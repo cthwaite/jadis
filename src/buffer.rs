@@ -87,8 +87,11 @@ impl<B: gfx_hal::Backend> Buffer<B> {
         let stride = ::std::mem::size_of::<T>() as u64;
         let buffer_len = size as u64 * stride;
 
-        let unbound_buffer = device.create_buffer(buffer_len, usage)?;
-        let mem_req = device.get_buffer_requirements(&unbound_buffer);
+        let (mut unbound_buffer, mem_req) = unsafe {
+            let unbound_buffer = device.create_buffer(buffer_len, usage)?;
+            let mem_req = device.get_buffer_requirements(&unbound_buffer);
+            (unbound_buffer, mem_req)
+        };
 
         let upload_type = memory_types
             .iter()
@@ -100,11 +103,14 @@ impl<B: gfx_hal::Backend> Buffer<B> {
             .map(|(id, _ty)| MemoryTypeId(id))
             .ok_or(BufferError::NoSuitableMemoryType)?;
 
-        let buffer_memory = device.allocate_memory(upload_type, mem_req.size)?;
-        let buffer = device.bind_buffer_memory(&buffer_memory, 0, unbound_buffer)?;
+        let buffer_memory = unsafe {
+            let buffer_memory = device.allocate_memory(upload_type, mem_req.size)?;
+            device.bind_buffer_memory(&buffer_memory, 0, &mut unbound_buffer)?;
+            buffer_memory
+        };
 
         Ok((
-            buffer,
+            unbound_buffer,
             buffer_memory,
             mem_req.size,
         ))
@@ -156,19 +162,21 @@ impl<B: gfx_hal::Backend> Buffer<B> {
         let memory = self.memory.as_ref().unwrap();
 
         // TODO: return result
-        let mut dest = device.acquire_mapping_writer::<T>(memory, 0..buffer_len)?;
-        dest.copy_from_slice(data);
-        device.release_mapping_writer(dest).unwrap();
+        unsafe { 
+            let mut dest = device.acquire_mapping_writer::<T>(memory, 0..buffer_len)?;
+            dest.copy_from_slice(data);
+            device.release_mapping_writer(dest).unwrap();
+        }
         Ok(())
     }
 
     // Destroy the buffer.
     pub fn destroy(&mut self, device: &B::Device) {
         if let Some(buffer) = self.buffer.take() {
-            device.destroy_buffer(buffer);
+            unsafe {device.destroy_buffer(buffer)};
         }
         if let Some(memory) = self.memory.take() {
-            device.free_memory(memory);
+            unsafe {device.free_memory(memory)};
         }
     }
 }
@@ -182,24 +190,28 @@ pub fn empty_buffer<B: Backend, Item>(
 ) -> (B::Buffer, B::Memory) {
     let stride = ::std::mem::size_of::<Item>() as u64;
     let buffer_len = item_count as u64 * stride;
-    let unbound_buffer = device.create_buffer(buffer_len, usage).unwrap();
-    let req = device.get_buffer_requirements(&unbound_buffer);
+    let (mut unbound_buffer, mem_req) = unsafe {
+        let unbound_buffer = device.create_buffer(buffer_len, usage).unwrap();
+        let mem_req = device.get_buffer_requirements(&unbound_buffer);
+        (unbound_buffer, mem_req)
+    };
 
     let upload_type = memory_types
         .iter()
         .enumerate()
         .find(|(id, ty)| {
-            let type_supported = req.type_mask & (1_u64 << id) != 0;
+            let type_supported = mem_req.type_mask & (1_u64 << id) != 0;
             type_supported && ty.properties.contains(properties)
         })
         .map(|(id, _ty)| MemoryTypeId(id))
         .expect("Could not find appropriate vertex buffer memory type.");
-    let buffer_memory = device.allocate_memory(upload_type, req.size).unwrap();
-    let buffer = device
-        .bind_buffer_memory(&buffer_memory, 0, unbound_buffer)
-        .unwrap();
+    let buffer_memory = unsafe {
+        let buffer_memory = device.allocate_memory(upload_type, mem_req.size).unwrap();
+        device.bind_buffer_memory(&buffer_memory, 0, &mut unbound_buffer).unwrap();
+        buffer_memory
+    };
 
-    (buffer, buffer_memory)
+    (unbound_buffer, buffer_memory)
 }
 
 pub fn fill_buffer<B: gfx_hal::Backend, T: Copy>(
@@ -210,11 +222,13 @@ pub fn fill_buffer<B: gfx_hal::Backend, T: Copy>(
     let stride = ::std::mem::size_of::<T>() as u64;
     let buffer_len = data.len() as u64 * stride;
 
-    let mut dest = device
-        .acquire_mapping_writer::<T>(&buffer_memory, 0..buffer_len)
-        .unwrap();
-    dest.copy_from_slice(data);
-    device.release_mapping_writer(dest);
+    unsafe {
+        let mut dest = device
+            .acquire_mapping_writer::<T>(&buffer_memory, 0..buffer_len)
+            .unwrap();
+        dest.copy_from_slice(data);
+        device.release_mapping_writer(dest);
+    }
 }
 
 pub fn create_buffer<B: Backend, Item: Copy>(

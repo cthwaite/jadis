@@ -17,8 +17,8 @@ pub struct SwapchainState<B: gfx_hal::Backend> {
 
 impl<B: gfx_hal::Backend> SwapchainState<B> {
     pub fn new(backend: &mut Context<B>) -> Self {
-        let (caps, _, _) = backend.get_compatibility();
-        let swap_config = SwapchainConfig::from_caps(&caps, backend.surface_colour_format);
+        let (caps, _, _, _) = backend.get_compatibility();
+        let swap_config = SwapchainConfig::from_caps(&caps, backend.surface_colour_format, Extent2D { height: 1024, width: 768 });
         let extent = swap_config.extent.to_extent();
         let (swapchain, back_buffer) = backend.create_swapchain(swap_config, None);
         SwapchainState {
@@ -36,8 +36,8 @@ impl<B: gfx_hal::Backend> SwapchainState<B> {
     /// Rebuild the swapchain.
     pub fn rebuild(&mut self, backend: &mut Context<B>) {
         self.destroy(&backend.device);
-        let (caps, _, _) = backend.get_compatibility();
-        let swap_config = SwapchainConfig::from_caps(&caps, backend.surface_colour_format);
+        let (caps, _, _, _) = backend.get_compatibility();
+        let swap_config = SwapchainConfig::from_caps(&caps, backend.surface_colour_format, Extent2D { height: 1024, width: 768 });
         let extent = swap_config.extent.to_extent();
         let (swapchain, back_buffer) = backend.create_swapchain(swap_config, None);
         self.swapchain = Some(swapchain);
@@ -48,7 +48,7 @@ impl<B: gfx_hal::Backend> SwapchainState<B> {
     /// Destroy the swapchain.
     pub fn destroy(&mut self, device: &B::Device) {
         if let Some(swapchain) = self.swapchain.take() {
-            device.destroy_swapchain(swapchain);
+            unsafe {device.destroy_swapchain(swapchain)};
         }
         self.back_buffer.take();
     }
@@ -95,7 +95,7 @@ impl<B: gfx_hal::Backend> FramebufferState<B> {
                     .map_to_image_views(&images, ViewKind::D2, Swizzle::NO, color_range)
                     .unwrap();
                 let fbos = context
-                    .image_views_to_fbos(&image_views, &render_pass, swap_state.extent.clone())
+                    .image_views_to_fbos(&image_views, &render_pass, swap_state.extent)
                     .unwrap();
 
                 (image_views, fbos)
@@ -123,13 +123,17 @@ impl<B: gfx_hal::Backend> FramebufferState<B> {
 
     pub fn destroy(&mut self, device: &B::Device) {
         if let Some(framebuffers) = self.framebuffers.take() {
-            for framebuffer in framebuffers {
-                device.destroy_framebuffer(framebuffer);
+            unsafe {
+                for framebuffer in framebuffers {
+                    device.destroy_framebuffer(framebuffer);
+                }
             }
         }
         if let Some(image_views) = self.image_views.take() {
-            for image_view in image_views {
-                device.destroy_image_view(image_view);
+            unsafe {
+                for image_view in image_views {
+                    device.destroy_image_view(image_view);
+                }
             }
         }
     }

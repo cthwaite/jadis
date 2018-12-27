@@ -6,7 +6,10 @@ use fern;
 use log;
 use serde_derive::{Deserialize, Serialize};
 use toml;
-use winit::{EventsLoop, WindowBuilder};
+#[cfg(not(feature = "gl"))]
+use gfx_backend::winit;
+#[cfg(feature = "gl")]
+use gfx_backend::glutin;
 
 #[serde(default)]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -27,13 +30,22 @@ impl Default for WindowConfig {
 }
 
 impl WindowConfig {
-    pub fn get_builder(&self) -> WindowBuilder {
-        WindowBuilder::new()
+    #[cfg(feature = "gl")]
+    pub fn get_builder(&self) -> glutin::WindowBuilder {
+        glutin::WindowBuilder::new()
             .with_title("jadis")
             .with_dimensions((self.width, self.height).into())
             .with_decorations(self.decorations)
     }
-    pub fn build(&self, events_loop: &EventsLoop) -> Result<winit::Window, winit::CreationError> {
+    #[cfg(not(feature = "gl"))]
+    pub fn get_builder(&self) -> winit::WindowBuilder {
+        winit::WindowBuilder::new()
+            .with_title("jadis")
+            .with_dimensions((self.width, self.height).into())
+            .with_decorations(self.decorations)
+    }
+    #[cfg(not(feature = "gl"))]
+    pub fn build(&self, events_loop: &winit::EventsLoop) -> Result<winit::Window, winit::CreationError> {
         self.get_builder().build(&events_loop)
     }
 }

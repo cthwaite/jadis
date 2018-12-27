@@ -1,4 +1,7 @@
-use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+#[cfg(not(feature = "gl"))]
+use gfx_backend::winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+#[cfg(feature = "gl")]
+use gfx_backend::glutin::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 
 /// The InputHandler trait is used to react to, process and optionally modify or
 /// cancel further propagation of incoming events.
